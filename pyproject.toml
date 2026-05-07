@@ -22,7 +22,6 @@ select = [
     "E",      # pycodestyle errors
     "W",      # pycodestyle warnings
     "F",      # pyflakes
-    "I",      # isort
     "UP",     # pyupgrade
     "C90",    # mccabe complexity
     # "D",      # pydocstyle

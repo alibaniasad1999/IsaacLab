@@ -1,14 +1,5 @@
 """
-Step 2:
-Two DynamicCapsules connected with a Spherical Joint.
-
-Run:
-
-    ./python.sh spherical.py
-
-or with IsaacLab:
-
-    ./isaaclab.sh -p scripts/my_experiments/spherical.py
+    Here is my second step.
 """
 
 from isaacsim import SimulationApp
@@ -25,24 +16,24 @@ from isaacsim.core.api.objects import DynamicCapsule
 from pxr import UsdPhysics, Gf, Sdf
 
 
-# ------------------------------------------------------------
-# Create world
-# ------------------------------------------------------------
+# -------------------------------------------------------------
+# Create World
+# -------------------------------------------------------------
 world = World(stage_units_in_meters=1.0)
 world.scene.add_default_ground_plane(z_position=0.0)
 
 
-# ------------------------------------------------------------
+# -------------------------------------------------------------
 # Capsule settings
-# ------------------------------------------------------------
+# -------------------------------------------------------------
 CAPSULE_HEIGHT = 0.6
 CAPSULE_RADIUS = 0.08
 CAPSULE_MASS = 0.2
 
 
-# ------------------------------------------------------------
+# -------------------------------------------------------------
 # Create capsule 1
-# ------------------------------------------------------------
+# -------------------------------------------------------------
 capsule_1 = world.scene.add(
     DynamicCapsule(
         prim_path="/World/capsule1",
@@ -51,15 +42,14 @@ capsule_1 = world.scene.add(
         radius=CAPSULE_RADIUS,
         height=CAPSULE_HEIGHT,
         color=np.array([0.1, 0.4, 1.0]),
-        mass=CAPSULE_MASS,
+        mass=CAPSULE_MASS
     )
 )
 
 
-# ------------------------------------------------------------
+# -------------------------------------------------------------
 # Create capsule 2
-# Put it below capsule 1
-# ------------------------------------------------------------
+# -------------------------------------------------------------
 capsule_2 = world.scene.add(
     DynamicCapsule(
         prim_path="/World/capsule2",
@@ -67,15 +57,16 @@ capsule_2 = world.scene.add(
         position=np.array([0.0, 0.0, 1.9]),
         radius=CAPSULE_RADIUS,
         height=CAPSULE_HEIGHT,
-        color=np.array([0.8, 0.3, 1.0]),
-        mass=CAPSULE_MASS,
+        color=np.array([0.5, 0.4, 1.0]),
+        mass=CAPSULE_MASS
     )
 )
 
 
-# ------------------------------------------------------------
+# -------------------------------------------------------------
 # Add Spherical Joint between capsule1 and capsule2
 # ------------------------------------------------------------
+
 stage = world.stage
 
 joint = UsdPhysics.SphericalJoint.Define(
@@ -83,15 +74,17 @@ joint = UsdPhysics.SphericalJoint.Define(
     "/World/spherical_joint_capsule1_capsule2"
 )
 
-# Connect body 0 to capsule1
+# Connec body 0 to capsule_1
 joint.CreateBody0Rel().SetTargets([
     Sdf.Path("/World/capsule1")
 ])
 
-# Connect body 1 to capsule2
+
+# Connec body 1 to capsule_2
 joint.CreateBody1Rel().SetTargets([
     Sdf.Path("/World/capsule2")
 ])
+
 
 # Joint point on capsule1:
 # bottom of capsule1
@@ -99,8 +92,9 @@ joint.CreateLocalPos0Attr().Set(
     Gf.Vec3f(0.0, 0.0, -CAPSULE_HEIGHT / 2.0)
 )
 
-# Joint point on capsule2:
-# top of capsule2
+
+# Joint point on capsule1:
+# bottom of capsule2
 joint.CreateLocalPos1Attr().Set(
     Gf.Vec3f(0.0, 0.0, CAPSULE_HEIGHT / 2.0)
 )
@@ -109,6 +103,35 @@ joint.CreateLocalPos1Attr().Set(
 joint.CreateCollisionEnabledAttr().Set(False)
 
 print("Spherical joint created between capsule1 and capsule2.")
+
+# -------------------------------------------------------------
+# Add Fixed Joint between capsule1 and the world
+# -------------------------------------------------------------
+
+fixed_joint = UsdPhysics.FixedJoint.Define(
+    stage,
+    "/World/fixed_joint_capsule1_to_world"
+)
+
+# Body0 is empty, so it means "world"
+# Body1 is capsule1
+fixed_joint.CreateBody1Rel().SetTargets([
+    Sdf.Path("/World/capsule1")
+])
+
+# Fixed point in the world:
+# same position as the top of capsule1
+fixed_joint.CreateLocalPos0Attr().Set(
+    Gf.Vec3f(0.0, 0.0, 2.8)
+)
+
+# Point on capsule1:
+# top of capsule1 in capsule1 local coordinates
+fixed_joint.CreateLocalPos1Attr().Set(
+    Gf.Vec3f(0.0, 0.0, CAPSULE_HEIGHT / 2.0)
+)
+
+print("Fixed joint created between capsule1 and the world.")
 
 
 # ------------------------------------------------------------

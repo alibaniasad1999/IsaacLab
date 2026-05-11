@@ -1,26 +1,26 @@
 """
 Flexible cable connected to rigid connectors in IsaacSim.
-
-A capsule-chain cable (1 meter) suspended from a fixed rigid connector
-(top) with a weighted rigid connector (bottom), plus an obstacle to
-demonstrate realistic contact and flexibility.
+Automatically records 10 seconds of simulation and saves key frames for report.
 
 run:
     conda activate env_isaaclab
-    python scripts/my_experiments/cable.py
+    python scripts/my_experiments/cable_v1.py
 """
 
+from pathlib import Path
 from isaacsim.simulation_app import SimulationApp
 
 simulation_app = SimulationApp({"headless": False})
 
 import numpy as np
 import time
+import cv2
 
 from isaacsim.core.api.world import World
 from isaacsim.core.api.objects import DynamicCapsule, DynamicCuboid
 
 from pxr import UsdPhysics, Gf, Sdf, PhysxSchema
+import omni.replicator.core as rep
 
 # ----------------------------------------------------------
 # Cable Settings
@@ -29,9 +29,6 @@ NUM_LINKS = 60
 TOTAL_CABLE_LENGTH = 1.0
 LINK_RADIUS = 4E-3
 
-# Capsule total length along axis = height + 2*radius.
-# We want adjacent capsule *tips* to meet at the joint anchor,
-# so center-to-center spacing equals capsule total length.
 SEGMENT_SPACING = TOTAL_CABLE_LENGTH / NUM_LINKS
 LINK_HEIGHT = max(SEGMENT_SPACING - 2.0 * LINK_RADIUS, 1e-4)
 
@@ -41,13 +38,11 @@ LINK_MASS = TOTAL_CABLE_MASS / NUM_LINKS
 
 ANCHOR_Z = 2.0
 
-# Cable bending stiffness via spherical-joint cone limit.
-# Smaller angle => stiffer cable.
+# Cable bending stiffness
 CONE_LIMIT_DEG = 8.0
 TWIST_LIMIT_DEG = 5.8
 
-# Damping makes the chain behave like a real cable instead of
-# a frictionless pendulum chain.
+# Damping
 LINEAR_DAMPING = 0.2
 ANGULAR_DAMPING = 1.0
 JOINT_DAMPING = 0.05
@@ -56,19 +51,18 @@ JOINT_STIFFNESS = 0.0
 SOLVER_POSITION_ITERATIONS = 64
 SOLVER_VELOCITY_ITERATIONS = 8
 
-# Continuous collision detection — important for thin/fast bodies
 ENABLE_CCD = True
 
 # ----------------------------------------------------------
 # Rigid Connector Settings
 # ----------------------------------------------------------
-TOP_CONNECTOR_SIZE = 0.06       # 6 cm cube
+TOP_CONNECTOR_SIZE = 0.06
 TOP_CONNECTOR_MASS = 5.0
-TOP_CONNECTOR_COLOR = np.array([0.2, 0.4, 0.8])   # blue
+TOP_CONNECTOR_COLOR = np.array([0.2, 0.4, 0.8])
 
-BOTTOM_CONNECTOR_SIZE = 0.04    # 4 cm cube
+BOTTOM_CONNECTOR_SIZE = 0.04
 BOTTOM_CONNECTOR_MASS = 0.5
-BOTTOM_CONNECTOR_COLOR = np.array([0.8, 0.2, 0.2])  # red
+BOTTOM_CONNECTOR_COLOR = np.array([0.8, 0.2, 0.2])
 
 # ----------------------------------------------------------
 # Obstacle Settings
@@ -76,15 +70,39 @@ BOTTOM_CONNECTOR_COLOR = np.array([0.8, 0.2, 0.2])  # red
 OBSTACLE_SIZE = 0.08
 OBSTACLE_POSITION = np.array([0.15, 0.0, ANCHOR_Z - TOTAL_CABLE_LENGTH * 0.4])
 OBSTACLE_MASS = 50.0
-OBSTACLE_COLOR = np.array([0.3, 0.7, 0.3])  # green
+OBSTACLE_COLOR = np.array([0.3, 0.7, 0.3])
+
+# ----------------------------------------------------------
+# Recording Settings
+# ----------------------------------------------------------
+SCRIPT_DIR = Path(__file__).parent
+OUTPUT_DIR = SCRIPT_DIR / "cable_output"
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+PHYSICS_DT = 1.0 / 240.0
+RENDER_DT = 1.0 / 60.0
+
+RECORD_SECONDS = 10
+VIDEO_FPS = 30
+STEPS_PER_VIDEO_FRAME = int(1.0 / (PHYSICS_DT * VIDEO_FPS))  # = 8
+TOTAL_RECORD_STEPS = int(RECORD_SECONDS / PHYSICS_DT)         # = 2400
+VIDEO_WIDTH = 1280
+VIDEO_HEIGHT = 720
+VIDEO_PATH = OUTPUT_DIR / "cable_simulation.mp4"
+
+# Key frames to save as PNG for the report (in seconds)
+KEY_FRAME_TIMES = [0.0, 2.0, 5.0, 10.0]
+KEY_FRAME_STEPS = [int(t / PHYSICS_DT) for t in KEY_FRAME_TIMES]
+
+WARMUP_STEPS = 30  # let renderer initialize before capturing
 
 
 # ----------------------------------------------------------
 # World
 # ----------------------------------------------------------
 world = World(stage_units_in_meters=1.0,
-              physics_dt=1.0 / 240.0,
-              rendering_dt=1.0 / 60.0)
+              physics_dt=PHYSICS_DT,
+              rendering_dt=RENDER_DT)
 world.scene.add_default_ground_plane(z_position=0.0)
 
 stage = world.stage
@@ -114,7 +132,6 @@ def create_top_connector() -> DynamicCuboid:
         )
     )
 
-    # Pin the connector to the world so it stays in place
     fixed_joint = UsdPhysics.FixedJoint.Define(stage, "/World/fix_top_connector")
     fixed_joint.CreateBody1Rel().SetTargets([Sdf.Path("/World/top_connector")])
     fixed_joint.CreateLocalPos0Attr().Set(
@@ -159,7 +176,6 @@ def create_obstacle() -> DynamicCuboid:
         )
     )
 
-    # Pin obstacle to world
     fixed_joint = UsdPhysics.FixedJoint.Define(stage, "/World/fix_obstacle")
     fixed_joint.CreateBody1Rel().SetTargets([Sdf.Path("/World/obstacle")])
     fixed_joint.CreateLocalPos0Attr().Set(Gf.Vec3f(*OBSTACLE_POSITION))
@@ -172,7 +188,6 @@ def create_obstacle() -> DynamicCuboid:
 # Create one capsule link
 # -------------------------------------------------------------
 def create_capsule(index: int) -> DynamicCapsule:
-    # Top capsule's top tip at ANCHOR_Z, then stack downward by SEGMENT_SPACING.
     center_z = ANCHOR_Z - index * SEGMENT_SPACING - LINK_RADIUS - LINK_HEIGHT / 2
     capsule = world.scene.add(
         DynamicCapsule(
@@ -188,14 +203,12 @@ def create_capsule(index: int) -> DynamicCapsule:
 
     prim = stage.GetPrimAtPath(f"/World/capsule_{index}")
 
-    # Damping + CCD + solver iterations on each rigid body
     physx_rb = PhysxSchema.PhysxRigidBodyAPI.Apply(prim)
     physx_rb.CreateSolverPositionIterationCountAttr().Set(SOLVER_POSITION_ITERATIONS)
     physx_rb.CreateSolverVelocityIterationCountAttr().Set(SOLVER_VELOCITY_ITERATIONS)
     physx_rb.CreateLinearDampingAttr().Set(LINEAR_DAMPING)
     physx_rb.CreateAngularDampingAttr().Set(ANGULAR_DAMPING)
     physx_rb.CreateEnableCCDAttr().Set(ENABLE_CCD)
-    # Sleep thresholds — let small motions still register
     physx_rb.CreateSleepThresholdAttr().Set(1e-5)
     physx_rb.CreateStabilizationThresholdAttr().Set(1e-6)
 
@@ -204,7 +217,6 @@ def create_capsule(index: int) -> DynamicCapsule:
 
 # -------------------------------------------------------------
 # D6 joint between adjacent capsules
-# (3 rotational DOFs with cone+twist limits, translation locked)
 # -------------------------------------------------------------
 def create_link_joint(index: int):
     joint_path = f"/World/cable_joint_{index}_{index+1}"
@@ -213,37 +225,28 @@ def create_link_joint(index: int):
     joint.CreateBody0Rel().SetTargets([Sdf.Path(f"/World/capsule_{index}")])
     joint.CreateBody1Rel().SetTargets([Sdf.Path(f"/World/capsule_{index+1}")])
 
-    # Bottom tip of upper capsule → top tip of lower capsule
     joint.CreateLocalPos0Attr().Set(Gf.Vec3f(0.0, 0.0, -(LINK_HEIGHT / 2.0 + LINK_RADIUS)))
     joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, +(LINK_HEIGHT / 2.0 + LINK_RADIUS)))
 
-    # Disable collision between joined capsules — they overlap at the anchor point
     joint.CreateCollisionEnabledAttr().Set(False)
-    # Use maximal-coordinate solver — more stable for long chains
     joint.CreateExcludeFromArticulationAttr().Set(True)
 
-    # Get the underlying USD prim to apply LimitAPI and DriveAPI schemas
     prim = joint.GetPrim()
 
-    # Lock all 3 translational DOFs
     for axis in ("transX", "transY", "transZ"):
         limit = UsdPhysics.LimitAPI.Apply(prim, axis)
-        # low > high => locked
         limit.CreateLowAttr().Set(1.0)
         limit.CreateHighAttr().Set(-1.0)
 
-    # Cone-limit the two swing axes
     for axis in ("rotY", "rotZ"):
         limit = UsdPhysics.LimitAPI.Apply(prim, axis)
         limit.CreateLowAttr().Set(-CONE_LIMIT_DEG)
         limit.CreateHighAttr().Set(CONE_LIMIT_DEG)
 
-    # Twist limit
     twist_limit = UsdPhysics.LimitAPI.Apply(prim, "rotX")
     twist_limit.CreateLowAttr().Set(-TWIST_LIMIT_DEG)
     twist_limit.CreateHighAttr().Set(TWIST_LIMIT_DEG)
 
-    # Damping on each rotational DOF — gives the cable its viscous feel
     for axis in ("rotX", "rotY", "rotZ"):
         drive = UsdPhysics.DriveAPI.Apply(prim, axis)
         drive.CreateTypeAttr().Set("force")
@@ -256,13 +259,11 @@ def create_link_joint(index: int):
 # Attach cable ends to connectors
 # -------------------------------------------------------------
 def attach_cable_to_top_connector():
-    """D6 joint from top connector to first capsule."""
     joint = UsdPhysics.Joint.Define(stage, "/World/joint_top_connector_to_cable")
 
     joint.CreateBody0Rel().SetTargets([Sdf.Path("/World/top_connector")])
     joint.CreateBody1Rel().SetTargets([Sdf.Path("/World/capsule_0")])
 
-    # Bottom face of connector → top tip of first capsule
     joint.CreateLocalPos0Attr().Set(Gf.Vec3f(0.0, 0.0, -TOP_CONNECTOR_SIZE / 2))
     joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, +(LINK_HEIGHT / 2.0 + LINK_RADIUS)))
 
@@ -271,13 +272,11 @@ def attach_cable_to_top_connector():
 
     prim = joint.GetPrim()
 
-    # Lock translation
     for axis in ("transX", "transY", "transZ"):
         limit = UsdPhysics.LimitAPI.Apply(prim, axis)
         limit.CreateLowAttr().Set(1.0)
         limit.CreateHighAttr().Set(-1.0)
 
-    # Allow limited bending at the connector
     for axis in ("rotY", "rotZ"):
         limit = UsdPhysics.LimitAPI.Apply(prim, axis)
         limit.CreateLowAttr().Set(-CONE_LIMIT_DEG)
@@ -289,7 +288,6 @@ def attach_cable_to_top_connector():
 
 
 def attach_cable_to_bottom_connector():
-    """Fixed joint from last capsule to bottom connector."""
     joint = UsdPhysics.FixedJoint.Define(
         stage, "/World/joint_cable_to_bottom_connector"
     )
@@ -297,7 +295,6 @@ def attach_cable_to_bottom_connector():
     joint.CreateBody0Rel().SetTargets([Sdf.Path(f"/World/capsule_{NUM_LINKS - 1}")])
     joint.CreateBody1Rel().SetTargets([Sdf.Path("/World/bottom_connector")])
 
-    # Bottom tip of last capsule → top face of bottom connector
     joint.CreateLocalPos0Attr().Set(Gf.Vec3f(0.0, 0.0, -(LINK_HEIGHT / 2.0 + LINK_RADIUS)))
     joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, BOTTOM_CONNECTOR_SIZE / 2))
 
@@ -344,35 +341,111 @@ print("")
 
 
 # -------------------------------------------------------------
-# Start simulation
+# Camera setup for recording
+# -------------------------------------------------------------
+print("Setting up recording camera...")
+
+# Set viewport camera to a good angle
+try:
+    from isaacsim.core.utils.viewports import set_camera_view
+except ImportError:
+    from omni.isaac.core.utils.viewports import set_camera_view
+
+set_camera_view(
+    eye=np.array([1.0, 0.8, 2.2]),
+    target=np.array([0.0, 0.0, 1.5]),
+)
+
+# Create render product from viewport camera
+render_product = rep.create.render_product("/OmniverseKit_Persp", (VIDEO_WIDTH, VIDEO_HEIGHT))
+rgb_annotator = rep.AnnotatorRegistry.get_annotator("rgb")
+rgb_annotator.attach([render_product])
+
+
+# -------------------------------------------------------------
+# Start simulation + recording
 # -------------------------------------------------------------
 world.reset()
 
-# Nudge the bottom connector sideways toward the obstacle
 try:
     bottom_connector.set_linear_velocity(np.array([1.5, 0.0, 0.0]))
 except Exception as e:
     print("Could not set initial velocity:", e)
 
+# Warm up renderer so annotator produces valid frames
+print("Warming up renderer...")
+for _ in range(WARMUP_STEPS):
+    world.step(render=True)
+
+# Start video writer
+fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+video_writer = cv2.VideoWriter(str(VIDEO_PATH), fourcc, VIDEO_FPS, (VIDEO_WIDTH, VIDEO_HEIGHT))
+
+print(f"Recording {RECORD_SECONDS} seconds of simulation...")
+print(f"  Output video : {VIDEO_PATH}")
+print(f"  Key frames   : {OUTPUT_DIR}")
+print("")
+
+step_count = 0
+frames_written = 0
+recording_done = False
 
 try:
-    step_count = 0
     while simulation_app.is_running():
         world.step(render=True)
         step_count += 1
 
-        if step_count % 120 == 0:
+        # --- Recording phase ---
+        if not recording_done and step_count <= TOTAL_RECORD_STEPS:
+            # Capture every N-th step to match VIDEO_FPS
+            if step_count % STEPS_PER_VIDEO_FRAME == 0:
+                data = rgb_annotator.get_data()
+                if data is not None and data.size > 0:
+                    frame_rgb = data[:, :, :3]  # drop alpha channel
+                    frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+                    video_writer.write(frame_bgr)
+                    frames_written += 1
+
+            # Save key frames as PNG for the report
+            if step_count in KEY_FRAME_STEPS:
+                data = rgb_annotator.get_data()
+                if data is not None and data.size > 0:
+                    t = step_count * PHYSICS_DT
+                    frame_bgr = cv2.cvtColor(data[:, :, :3], cv2.COLOR_RGB2BGR)
+                    path = OUTPUT_DIR / f"frame_t{t:.0f}s.png"
+                    cv2.imwrite(str(path), frame_bgr)
+                    print(f"  Saved key frame: {path.name}  (t = {t:.1f}s)")
+
+            # Finish recording
+            if step_count >= TOTAL_RECORD_STEPS:
+                video_writer.release()
+                recording_done = True
+                print("")
+                print(f"Recording complete: {frames_written} frames written")
+                print(f"  Video: {VIDEO_PATH}")
+                print("Simulation continues — close window or Ctrl+C to exit.")
+                print("")
+
+        # --- Telemetry ---
+        if step_count % 480 == 0:  # every 2 seconds
+            sim_time = step_count * PHYSICS_DT
             pos_top, _ = capsules[0].get_world_pose()
             pos_bot, _ = bottom_connector.get_world_pose()
+            status = "REC" if not recording_done else "   "
             print(
+                f"[{status}] t={sim_time:5.1f}s | "
                 f"top z: {pos_top[2]:.4f} | "
-                f"connector xyz: {pos_bot[0]:+.4f}, "
-                f"{pos_bot[1]:+.4f}, {pos_bot[2]:.4f} | "
-                f"t: {time.time():.1f}"
+                f"connector: {pos_bot[0]:+.4f}, "
+                f"{pos_bot[1]:+.4f}, {pos_bot[2]:.4f}"
             )
 
 except KeyboardInterrupt:
     print("\nInterrupted by user.")
 
 finally:
+    if not recording_done:
+        video_writer.release()
+        print(f"Partial recording saved: {frames_written} frames")
     simulation_app.close()
+
+print("Done.")

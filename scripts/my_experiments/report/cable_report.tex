@@ -1,0 +1,179 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{subcaption}
+
+\title{Flexible Cable Simulation with Rigid Connectors in IsaacSim}
+\author{Ali Bani Asad}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+% ------------------------------------------------------------------
+\section{Introduction}
+% ------------------------------------------------------------------
+
+This report presents a method for modeling and simulating a flexible cable
+connected to rigid connectors within NVIDIA IsaacSim. Since IsaacSim does
+not natively support deformable 1D cables, the cable is approximated using
+a chain of rigid capsule segments connected by constrained joints,
+providing realistic bending and torsional behavior.
+
+
+% ------------------------------------------------------------------
+\section{Approach}
+% ------------------------------------------------------------------
+
+The cable is modeled as a chain of \textbf{60 capsule-shaped rigid bodies}
+connected by \textbf{D6 joints} (6 degree-of-freedom joints). Each D6 joint
+locks all three translational axes and constrains the three rotational axes
+with cone and twist limits, producing cable-like flexibility.
+
+Two rigid connectors are attached to the cable:
+\begin{itemize}
+    \item \textbf{Top connector} (blue cube): A rigid block fixed to the
+          world frame via a fixed joint. The cable's first link attaches to
+          its bottom face through a D6 joint with limited rotation.
+    \item \textbf{Bottom connector} (red cube): A weighted rigid block
+          attached to the cable's free end via a fixed joint, representing
+          a plug or end-fitting.
+\end{itemize}
+
+A \textbf{green obstacle} (fixed cube) is placed in the scene so the cable
+can drape over it and demonstrate realistic contact interaction.
+
+
+% ------------------------------------------------------------------
+\section{Simulation Parameters}
+% ------------------------------------------------------------------
+
+\begin{table}[H]
+\centering
+\caption{Cable and simulation parameters.}
+\begin{tabular}{@{}llr@{}}
+\toprule
+\textbf{Parameter}         & \textbf{Symbol}    & \textbf{Value}  \\
+\midrule
+Number of links            &  $N$               & 60              \\
+Total cable length         &  $L$               & 1.0 m           \\
+Link radius                &  $r$               & 4.0 mm          \\
+Link height (cylinder)     &  $h$               & 8.67 mm         \\
+Segment spacing            &  $\Delta s$        & 16.67 mm        \\
+Total cable mass           &  $m_{\text{total}}$ & 1.0 kg         \\
+Per-link mass              &  $m_i$             & 16.67 g         \\
+Cone limit (swing)         &  $\theta_c$        & $8.0^\circ$     \\
+Twist limit                &  $\theta_t$        & $5.8^\circ$     \\
+Linear damping             &  $d_l$             & 0.2             \\
+Angular damping            &  $d_a$             & 1.0             \\
+Joint damping              &  $d_j$             & 0.05            \\
+Physics time step          &  $\Delta t$        & 1/240 s         \\
+Solver position iterations &                    & 64              \\
+Solver velocity iterations &                    & 8               \\
+Solver type                &                    & TGS             \\
+CCD                        &                    & enabled         \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Rigid connector parameters.}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+                    & \textbf{Top connector} & \textbf{Bottom connector} \\
+\midrule
+Size (cube side)    & 6 cm                   & 4 cm                      \\
+Mass                & 5.0 kg                 & 0.5 kg                    \\
+Constraint          & Fixed to world         & Free (weighted)           \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% ------------------------------------------------------------------
+\section{Results}
+% ------------------------------------------------------------------
+
+The simulation was run for 10 seconds. Key frames captured during the
+simulation are shown in Figure~\ref{fig:keyframes}. The cable is given an
+initial lateral velocity of 1.5 m/s at the bottom connector to induce
+swinging motion toward the obstacle.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{cable_output/frame_t0s.png}
+    \caption{$t = 0$ s --- initial configuration}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{cable_output/frame_t2s.png}
+    \caption{$t = 2$ s --- cable swinging}
+\end{subfigure}
+
+\vspace{0.5cm}
+
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{cable_output/frame_t5s.png}
+    \caption{$t = 5$ s --- contact with obstacle}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \includegraphics[width=\textwidth]{cable_output/frame_t10s.png}
+    \caption{$t = 10$ s --- settling}
+\end{subfigure}
+\caption{Key frames from the cable simulation.}
+\label{fig:keyframes}
+\end{figure}
+
+A full 10-second video recording of the simulation is available in the
+supplementary file \texttt{cable\_simulation.mp4}.
+
+
+% ------------------------------------------------------------------
+\section{Challenges}
+% ------------------------------------------------------------------
+
+\begin{itemize}
+    \item \textbf{Stability}: Long rigid-body chains are prone to jitter.
+          High solver iteration counts (64 position / 8 velocity) and the
+          TGS solver were required for stable behavior.
+    \item \textbf{Thin-body collisions}: The small capsule radius (4 mm)
+          required continuous collision detection (CCD) to prevent
+          tunneling at high velocities.
+    \item \textbf{Damping tuning}: Balancing linear, angular, and joint
+          damping was critical --- too little causes a frictionless pendulum
+          chain; too much makes the cable overly rigid.
+    \item \textbf{Joint limits}: The cone and twist limits control bending
+          stiffness. Smaller angles produce a stiffer cable but can cause
+          constraint violations if set too tight.
+\end{itemize}
+
+
+% ------------------------------------------------------------------
+\section{Conclusion and Next Steps}
+% ------------------------------------------------------------------
+
+The capsule-chain approach successfully models a flexible cable connected
+to rigid connectors in IsaacSim, with realistic gravity, contact, and
+bending behavior. Possible next steps include:
+
+\begin{itemize}
+    \item Integrating the cable with a robot manipulator for cable
+          manipulation tasks.
+    \item Exploring IsaacSim's deformable body API as an alternative to
+          the rigid-body chain approach.
+    \item Adding friction and material properties for more realistic
+          surface interactions.
+    \item Parameterizing the cable for different lengths, stiffnesses,
+          and diameters.
+\end{itemize}
+
+\end{document}

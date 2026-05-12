@@ -14,6 +14,7 @@ simulation_app = SimulationApp({"headless": False})
 
 import numpy as np
 import time
+import subprocess
 import cv2
 
 from isaacsim.core.api.world import World
@@ -380,11 +381,12 @@ print("Warming up renderer...")
 for _ in range(WARMUP_STEPS):
     world.step(render=True)
 
-# Start video writer
-fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-video_writer = cv2.VideoWriter(str(VIDEO_PATH), fourcc, VIDEO_FPS, (VIDEO_WIDTH, VIDEO_HEIGHT))
+# Directory for raw frames (will be stitched into video by ffmpeg)
+FRAMES_DIR = OUTPUT_DIR / "frames"
+FRAMES_DIR.mkdir(exist_ok=True)
 
 print(f"Recording {RECORD_SECONDS} seconds of simulation...")
+print(f"  Raw frames   : {FRAMES_DIR}")
 print(f"  Output video : {VIDEO_PATH}")
 print(f"  Key frames   : {OUTPUT_DIR}")
 print("")
@@ -404,9 +406,8 @@ try:
             if step_count % STEPS_PER_VIDEO_FRAME == 0:
                 data = rgb_annotator.get_data()
                 if data is not None and data.size > 0:
-                    frame_rgb = data[:, :, :3]  # drop alpha channel
-                    frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
-                    video_writer.write(frame_bgr)
+                    frame_bgr = cv2.cvtColor(data[:, :, :3], cv2.COLOR_RGB2BGR)
+                    cv2.imwrite(str(FRAMES_DIR / f"frame_{frames_written:05d}.png"), frame_bgr)
                     frames_written += 1
 
             # Save key frames as PNG for the report
@@ -419,15 +420,27 @@ try:
                     cv2.imwrite(str(path), frame_bgr)
                     print(f"  Saved key frame: {path.name}  (t = {t:.1f}s)")
 
-            # Finish recording
+            # Finish recording — stitch frames into H.264 mp4 with ffmpeg
             if step_count >= TOTAL_RECORD_STEPS:
-                video_writer.release()
                 recording_done = True
-                print("")
-                print(f"Recording complete: {frames_written} frames written")
-                print(f"  Video: {VIDEO_PATH}")
-                print("Simulation continues — close window or Ctrl+C to exit.")
-                print("")
+                print(f"\nCapture complete: {frames_written} frames")
+                print("Stitching video with ffmpeg...")
+                ffmpeg_cmd = [
+                    "ffmpeg", "-y",
+                    "-framerate", str(VIDEO_FPS),
+                    "-i", str(FRAMES_DIR / "frame_%05d.png"),
+                    "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    "-crf", "18",
+                    str(VIDEO_PATH),
+                ]
+                result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+                if result.returncode == 0:
+                    print(f"Video saved: {VIDEO_PATH}")
+                else:
+                    print(f"ffmpeg failed: {result.stderr[:300]}")
+                    print("Raw frames are still available in:", FRAMES_DIR)
+                print("Simulation continues — close window or Ctrl+C to exit.\n")
 
         # --- Telemetry ---
         if step_count % 120 == 0:  # every 2 seconds (120 steps * 1/60s)
@@ -446,9 +459,6 @@ except KeyboardInterrupt:
     print("\nInterrupted by user.")
 
 finally:
-    if not recording_done:
-        video_writer.release()
-        print(f"Partial recording saved: {frames_written} frames")
     simulation_app.close()
 
 print("Done.")

@@ -25,9 +25,11 @@ import omni.replicator.core as rep
 # ----------------------------------------------------------
 # Cable Settings
 # ----------------------------------------------------------
-NUM_LINKS = 60
+# NOTE: higher link count = more realistic but slower simulation.
+# 200 is a good balance. 500+ may run below real-time.
+NUM_LINKS = 200
 TOTAL_CABLE_LENGTH = 1.0
-LINK_RADIUS = 4E-3
+LINK_RADIUS = 1.5E-3  # 1.5 mm radius → 3 mm diameter cable
 
 SEGMENT_SPACING = TOTAL_CABLE_LENGTH / NUM_LINKS
 LINK_HEIGHT = max(SEGMENT_SPACING - 2.0 * LINK_RADIUS, 1e-4)
@@ -56,19 +58,19 @@ ENABLE_CCD = True
 # ----------------------------------------------------------
 # Rigid Connector Settings
 # ----------------------------------------------------------
-TOP_CONNECTOR_SIZE = 0.06
-TOP_CONNECTOR_MASS = 5.0
+TOP_CONNECTOR_SIZE = 0.03       # 3 cm cube
+TOP_CONNECTOR_MASS = 2.0
 TOP_CONNECTOR_COLOR = np.array([0.2, 0.4, 0.8])
 
-BOTTOM_CONNECTOR_SIZE = 0.04
-BOTTOM_CONNECTOR_MASS = 0.5
+BOTTOM_CONNECTOR_SIZE = 0.02    # 2 cm cube
+BOTTOM_CONNECTOR_MASS = 0.2
 BOTTOM_CONNECTOR_COLOR = np.array([0.8, 0.2, 0.2])
 
 # ----------------------------------------------------------
 # Obstacle Settings
 # ----------------------------------------------------------
-OBSTACLE_SIZE = 0.08
-OBSTACLE_POSITION = np.array([0.15, 0.0, ANCHOR_Z - TOTAL_CABLE_LENGTH * 0.4])
+OBSTACLE_SIZE = 0.04            # 4 cm cube
+OBSTACLE_POSITION = np.array([0.12, 0.0, ANCHOR_Z - TOTAL_CABLE_LENGTH * 0.4])
 OBSTACLE_MASS = 50.0
 OBSTACLE_COLOR = np.array([0.3, 0.7, 0.3])
 

@@ -31,22 +31,23 @@ providing realistic bending and torsional behavior.
 \section{Approach}
 % ------------------------------------------------------------------
 
-The cable is modeled as a chain of \textbf{60 capsule-shaped rigid bodies}
+The cable is modeled as a chain of \textbf{200 capsule-shaped rigid bodies}
 connected by \textbf{D6 joints} (6 degree-of-freedom joints). Each D6 joint
 locks all three translational axes and constrains the three rotational axes
-with cone and twist limits, producing cable-like flexibility.
+with cone and twist limits, producing cable-like flexibility. The high link
+count (200) ensures a smooth, continuous cable appearance.
 
 Two rigid connectors are attached to the cable:
 \begin{itemize}
-    \item \textbf{Top connector} (blue cube): A rigid block fixed to the
+    \item \textbf{Top connector} (blue cube, 3\,cm): A rigid block fixed to the
           world frame via a fixed joint. The cable's first link attaches to
           its bottom face through a D6 joint with limited rotation.
-    \item \textbf{Bottom connector} (red cube): A weighted rigid block
+    \item \textbf{Bottom connector} (red cube, 2\,cm): A weighted rigid block
           attached to the cable's free end via a fixed joint, representing
           a plug or end-fitting.
 \end{itemize}
 
-A \textbf{green obstacle} (fixed cube) is placed in the scene so the cable
+A \textbf{green obstacle} (fixed 4\,cm cube) is placed in the scene so the cable
 can drape over it and demonstrate realistic contact interaction.
 
 
@@ -61,13 +62,13 @@ can drape over it and demonstrate realistic contact interaction.
 \toprule
 \textbf{Parameter}         & \textbf{Symbol}    & \textbf{Value}  \\
 \midrule
-Number of links            &  $N$               & 60              \\
+Number of links            &  $N$               & 200             \\
 Total cable length         &  $L$               & 1.0 m           \\
-Link radius                &  $r$               & 4.0 mm          \\
-Link height (cylinder)     &  $h$               & 8.67 mm         \\
-Segment spacing            &  $\Delta s$        & 16.67 mm        \\
+Link radius                &  $r$               & 1.5 mm          \\
+Link height (cylinder)     &  $h$               & 2.0 mm          \\
+Segment spacing            &  $\Delta s$        & 5.0 mm          \\
 Total cable mass           &  $m_{\text{total}}$ & 1.0 kg         \\
-Per-link mass              &  $m_i$             & 16.67 g         \\
+Per-link mass              &  $m_i$             & 5.0 g           \\
 Cone limit (swing)         &  $\theta_c$        & $8.0^\circ$     \\
 Twist limit                &  $\theta_t$        & $5.8^\circ$     \\
 Linear damping             &  $d_l$             & 0.2             \\
@@ -89,8 +90,8 @@ CCD                        &                    & enabled         \\
 \toprule
                     & \textbf{Top connector} & \textbf{Bottom connector} \\
 \midrule
-Size (cube side)    & 6 cm                   & 4 cm                      \\
-Mass                & 5.0 kg                 & 0.5 kg                    \\
+Size (cube side)    & 3 cm                   & 2 cm                      \\
+Mass                & 2.0 kg                 & 0.2 kg                    \\
 Constraint          & Fixed to world         & Free (weighted)           \\
 \bottomrule
 \end{tabular}
@@ -109,24 +110,19 @@ swinging motion toward the obstacle.
 \begin{figure}[H]
 \centering
 \begin{subfigure}[b]{0.48\textwidth}
-    \includegraphics[width=\textwidth]{cable_output/frame_t0s.png}
-    \caption{$t = 0$ s --- initial configuration}
+    \includegraphics[width=\textwidth]{../cable_output/frame_t2s.png}
+    \caption{$t = 2$ s --- cable swinging}
 \end{subfigure}
 \hfill
 \begin{subfigure}[b]{0.48\textwidth}
-    \includegraphics[width=\textwidth]{cable_output/frame_t2s.png}
-    \caption{$t = 2$ s --- cable swinging}
+    \includegraphics[width=\textwidth]{../cable_output/frame_t5s.png}
+    \caption{$t = 5$ s --- contact with obstacle}
 \end{subfigure}
 
 \vspace{0.5cm}
 
 \begin{subfigure}[b]{0.48\textwidth}
-    \includegraphics[width=\textwidth]{cable_output/frame_t5s.png}
-    \caption{$t = 5$ s --- contact with obstacle}
-\end{subfigure}
-\hfill
-\begin{subfigure}[b]{0.48\textwidth}
-    \includegraphics[width=\textwidth]{cable_output/frame_t10s.png}
+    \includegraphics[width=\textwidth]{../cable_output/frame_t10s.png}
     \caption{$t = 10$ s --- settling}
 \end{subfigure}
 \caption{Key frames from the cable simulation.}
@@ -142,10 +138,10 @@ supplementary file \texttt{cable\_simulation.mp4}.
 % ------------------------------------------------------------------
 
 \begin{itemize}
-    \item \textbf{Stability}: Long rigid-body chains are prone to jitter.
-          High solver iteration counts (64 position / 8 velocity) and the
-          TGS solver were required for stable behavior.
-    \item \textbf{Thin-body collisions}: The small capsule radius (4 mm)
+    \item \textbf{Stability}: A 200-link rigid-body chain is prone to jitter
+          and constraint drift. High solver iteration counts (64 position /
+          8 velocity) and the TGS solver were required for stable behavior.
+    \item \textbf{Thin-body collisions}: The small capsule radius (1.5\,mm)
           required continuous collision detection (CCD) to prevent
           tunneling at high velocities.
     \item \textbf{Damping tuning}: Balancing linear, angular, and joint
@@ -154,6 +150,9 @@ supplementary file \texttt{cable\_simulation.mp4}.
     \item \textbf{Joint limits}: The cone and twist limits control bending
           stiffness. Smaller angles produce a stiffer cable but can cause
           constraint violations if set too tight.
+    \item \textbf{Performance}: Higher link counts produce smoother cables
+          but increase computational cost. 200 links was found to be a
+          good balance between visual realism and simulation performance.
 \end{itemize}
 
 

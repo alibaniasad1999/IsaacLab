@@ -83,11 +83,11 @@ PHYSICS_DT = 1.0 / 240.0
 RENDER_DT = 1.0 / 60.0
 
 RECORD_SECONDS = 10
-VIDEO_FPS = 30
-STEPS_PER_VIDEO_FRAME = int(1.0 / (PHYSICS_DT * VIDEO_FPS))  # = 8
+VIDEO_FPS = 60
+STEPS_PER_VIDEO_FRAME = int(1.0 / (PHYSICS_DT * VIDEO_FPS))  # = 4
 TOTAL_RECORD_STEPS = int(RECORD_SECONDS / PHYSICS_DT)         # = 2400
-VIDEO_WIDTH = 1280
-VIDEO_HEIGHT = 720
+VIDEO_WIDTH = 1920
+VIDEO_HEIGHT = 1080
 VIDEO_PATH = OUTPUT_DIR / "cable_simulation.mp4"
 
 # Key frames to save as PNG for the report (in seconds)
@@ -352,7 +352,7 @@ except ImportError:
     from omni.isaac.core.utils.viewports import set_camera_view
 
 set_camera_view(
-    eye=np.array([1.0, 0.8, 2.2]),
+    eye=np.array([0.6, 0.5, 1.8]),
     target=np.array([0.0, 0.0, 1.5]),
 )
 

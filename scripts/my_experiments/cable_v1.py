@@ -84,17 +84,18 @@ RENDER_DT = 1.0 / 60.0
 
 RECORD_SECONDS = 10
 VIDEO_FPS = 60
-STEPS_PER_VIDEO_FRAME = int(1.0 / (PHYSICS_DT * VIDEO_FPS))  # = 4
-TOTAL_RECORD_STEPS = int(RECORD_SECONDS / PHYSICS_DT)         # = 2400
+# world.step(render=True) advances by RENDER_DT per call (one render frame)
+STEPS_PER_VIDEO_FRAME = 1                                       # capture every step
+TOTAL_RECORD_STEPS = int(RECORD_SECONDS / RENDER_DT)            # = 600
 VIDEO_WIDTH = 1920
 VIDEO_HEIGHT = 1080
 VIDEO_PATH = OUTPUT_DIR / "cable_simulation.mp4"
 
 # Key frames to save as PNG for the report (in seconds)
 KEY_FRAME_TIMES = [0.0, 2.0, 5.0, 10.0]
-KEY_FRAME_STEPS = [int(t / PHYSICS_DT) for t in KEY_FRAME_TIMES]
+KEY_FRAME_STEPS = [int(t / RENDER_DT) for t in KEY_FRAME_TIMES]
 
-WARMUP_STEPS = 30  # let renderer initialize before capturing
+WARMUP_STEPS = 10  # let renderer initialize before capturing
 
 
 # ----------------------------------------------------------
@@ -352,7 +353,7 @@ except ImportError:
     from omni.isaac.core.utils.viewports import set_camera_view
 
 set_camera_view(
-    eye=np.array([0.6, 0.5, 1.8]),
+    eye=np.array([1.5, 1.0, 2.5]),
     target=np.array([0.0, 0.0, 1.5]),
 )
 
@@ -410,7 +411,7 @@ try:
             if step_count in KEY_FRAME_STEPS:
                 data = rgb_annotator.get_data()
                 if data is not None and data.size > 0:
-                    t = step_count * PHYSICS_DT
+                    t = step_count * RENDER_DT
                     frame_bgr = cv2.cvtColor(data[:, :, :3], cv2.COLOR_RGB2BGR)
                     path = OUTPUT_DIR / f"frame_t{t:.0f}s.png"
                     cv2.imwrite(str(path), frame_bgr)
@@ -427,8 +428,8 @@ try:
                 print("")
 
         # --- Telemetry ---
-        if step_count % 480 == 0:  # every 2 seconds
-            sim_time = step_count * PHYSICS_DT
+        if step_count % 120 == 0:  # every 2 seconds (120 steps * 1/60s)
+            sim_time = step_count * RENDER_DT
             pos_top, _ = capsules[0].get_world_pose()
             pos_bot, _ = bottom_connector.get_world_pose()
             status = "REC" if not recording_done else "   "

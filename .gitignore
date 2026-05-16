@@ -413,5 +413,6 @@ TSWLatexianTemp*
 
 # add my frames
 scripts/my_experiments/cable_output/frames/
+scripts/my_experiments/cable_output/hanging_kick/frames/
 # mac env
 .isaacenv/

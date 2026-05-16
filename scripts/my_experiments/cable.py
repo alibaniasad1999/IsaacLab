@@ -1,24 +1,22 @@
 """
-Flexible cable with rigid connectors in Isaac Sim — v2.
+Flexible cable with rigid connectors in Isaac Sim.
 
-Changes vs v1 (aligned with Govoni et al. 2025, arXiv:2504.13659):
+Aligned with Govoni et al. 2025 (arXiv:2504.13659):
 
-  Change 1 — Material-driven parameters: JOINT_STIFFNESS and JOINT_DAMPING
-             are derived from Young's modulus + geometry + damping ratio,
-             not hand-picked. K_bend = EI/L_segment (beam theory).
-  Change 2 — Cone limit widened (30° instead of 8°). The soft EI/L spring
-             now does the bending work; the cone limit is a safety net.
-  Change 3 — Twist DOF freed (Govoni: "Twisting springs are excluded").
-             No twist limit, no rotX drive.
-  Change 4 — Two experiment modes:
-               * "hanging_kick"      — v1 behaviour (top fixed, bottom kicked,
-                                       obstacle present).
-               * "both_ends_fixed"   — Govoni-style stability test: top fixed,
-                                       bottom kinematic, 5 mm step displacement
-                                       after a short settling phase.
-  Change 5 — Per-step CSV logging of capsule positions + stability monitor
-             that flags divergence and writes a summary.json. Designed to be
-             driven by govoni_sweep.py via environment variables.
+  1. Material-driven parameters: JOINT_STIFFNESS and JOINT_DAMPING are derived
+     from Young's modulus + geometry + damping ratio via beam theory
+     (K_bend = EI / L_segment).
+  2. Cone limit widened (30°). The soft EI/L spring does the bending work;
+     the cone limit is a safety net.
+  3. Twist DOF freed (Govoni: "Twisting springs are excluded").
+     No twist limit, no rotX drive.
+  4. Two experiment modes:
+       * "hanging_kick"    — top fixed, bottom kicked, obstacle present.
+       * "both_ends_fixed" — Govoni-style stability test: top fixed, bottom
+                             kinematic, 5 mm step displacement after settling.
+  5. Per-step CSV logging of capsule positions + stability monitor that flags
+     divergence and writes summary.json. Designed to be driven by
+     govoni_sweep.py via environment variables.
 
 Run (defaults: hanging_kick mode, 200 links, soft rubber):
     conda activate env_isaaclab

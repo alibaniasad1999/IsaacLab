@@ -7,18 +7,20 @@ run:
     python scripts/my_experiments/cable_v1.py
 """
 
-from os.path import join
+from pathlib import Path
 from isaacsim.simulation_app import SimulationApp
 
 simulation_app = SimulationApp({"headless": False})
 
 import numpy as np
 import time
+import subprocess
+import cv2
 
 from isaacsim.core.api.world import World
 from isaacsim.core.api.objects import DynamicCapsule
 
-from pxr import UsdPhysics, Gf, Sdf
+from pxr import UsdPhysics, Gf, Sdf, PhysxSchema
 
 
 # The PhysxSchema is an NVIDIA-proprietary extension to the
@@ -33,9 +35,11 @@ HAS_PHYSX_SCHEMA = True
 # ----------------------------------------------------------
 # Cable Setting
 # ----------------------------------------------------------
-NUM_LINKS = 60
-TOTAL_CABLE_LENGTH = 1
-LINK_RADIUS = 4E-3
+# NOTE: higher link count = more realistic but slower simulation.
+# 200 is a good balance. 500+ may run below real-time.
+NUM_LINKS = 200
+TOTAL_CABLE_LENGTH = 1.0
+LINK_RADIUS = 1.5E-3
 
 # Capsule total length along axis = height + 2*radius.
 # We want adjacent capsule *tips* to meet at the joint anchor,
@@ -44,7 +48,7 @@ SEGMENT_SPACING = TOTAL_CABLE_LENGTH / NUM_LINKS
 LINK_HEIGHT = max(SEGMENT_SPACING - 2.0 * LINK_RADIUS, -1e-4)
 
 # Masss
-TOTAL_CABLE_MASS = 1.0
+TOTAL_CABLE_MASS = 2.0
 LINK_MASS = TOTAL_CABLE_MASS / NUM_LINKS
 
 ANCHOR_Z = 2.0
@@ -56,7 +60,7 @@ TWIST_LIMIT_DEG = 5.8
 
 # Damping makes the chain behave like a real cable instead of
 # a frictionless pendulum chain.
-LINEAR_DAMPING = 0.2
+LINEAR_DAMPING = 0.2  # TODO: add units for them with some equation
 ANGULAR_DAMPING = 1.0
 JOINT_DAMPING = 0.05
 JOINT_STIFFNESS = 0.0

@@ -27,10 +27,10 @@
 This report presents a method for simulating flexible cables with rigid connectors
 in NVIDIA Isaac Sim using chains of rigid capsules connected by D6 joints whose
 stiffness and damping are derived from material properties via Euler--Bernoulli
-beam theory. We reproduce the parameter sweep of Govoni et al.\ (2025) and show
+beam theory. I reproduce the parameter sweep of Govoni et al.\ (2025) and show
 that the PhysX TGS solver remains stable in all five tested configurations,
 including one regime where the reference paper's explicit mass-spring-damper
-integrator diverges. Beyond the reproduction study, we present a parametric
+integrator diverges. Beyond the reproduction study, I present a parametric
 analysis of the derived joint parameters across material classes, dynamic
 trajectory analysis of cable behaviour, and a damping sensitivity study
 that quantifies the error in hand-tuned approaches. These results establish
@@ -87,7 +87,7 @@ for typical DLO manipulation tasks.
 
 \subsection{Material-Driven Parameter Derivation}
 
-Rather than hand-picking joint stiffness and damping values, we derive them
+Rather than hand-picking joint stiffness and damping values, I derive them
 from material properties using Euler--Bernoulli beam theory.  Given:
 \begin{itemize}[nosep]
     \item Young's modulus $E$ (\si{Pa}),
@@ -117,7 +117,7 @@ Isaac Sim uses degrees for all angular quantities.
 
 \subsection{Comparison with v1 Baseline}
 
-Our initial simulation (v1) used hand-picked parameters: zero bending
+My initial simulation (v1) used hand-picked parameters: zero bending
 stiffness ($K = 0$), a damping of \SI{0.05}{N.m.s/deg}, a narrow
 \ang{8} cone limit, and a \ang{5.8} twist limit.  Analysis revealed that
 the damping value was approximately $70{,}000\times$ critical damping
@@ -125,7 +125,7 @@ for the cable's geometry and material --- the cable behaved as if submerged
 in viscous fluid rather than air.
 
 Figure~\ref{fig:damping_sensitivity} quantifies this discrepancy.  The
-physically correct damping for our rubber cable at $\zeta = 0.2$ is
+physically correct damping for the rubber cable at $\zeta = 0.2$ is
 \SI{1.43e-7}{N.m.s/deg}, while the v1 value of \SI{0.05}{N.m.s/deg} is
 orders of magnitude above even critical damping ($\zeta = 1$).
 
@@ -144,7 +144,7 @@ of $\sim\!70{,}000$, producing unrealistic overdamped behaviour.}
 \section{Parametric Analysis}
 % ------------------------------------------------------------------
 
-Before running simulations, we analyse how the derived joint parameters
+Before running simulations, I analyse how the derived joint parameters
 vary across the space of materials and discretisations.  This analysis
 informs which configurations are feasible at a given physics timestep
 and guides domain-randomisation ranges for future RL training.
@@ -200,7 +200,7 @@ The simulation supports two modes:
 
 \subsection{Govoni Sweep Reproduction}
 
-To validate our model, we reproduce the five configurations from
+To validate the model, I reproduce the five configurations from
 Table~1 of Govoni et al.~\cite{govoni2025}.  Each configuration varies
 Young's modulus $E$ and the number of discrete masses $i$:
 
@@ -225,7 +225,7 @@ Row~3 is the critical case: Govoni's explicit MSD integrator diverges after
 \SI{0.4}{s} at $\Delta t = \SI{5e-6}{s}$.  Row~4 recovers stability by
 reducing $\Delta t$ to \SI{1e-7}{s}.
 
-Our sweep uses the PhysX TGS solver at $\Delta t = 1/240\;\text{s}
+The sweep uses the PhysX TGS solver at $\Delta t = 1/240\;\text{s}
 \approx \SI{4.17e-3}{s}$, with 64 position iterations and 8 velocity
 iterations.  An automated driver script (\texttt{govoni\_sweep.py}) launches
 each configuration, monitors angular velocities for divergence, and assembles
@@ -240,14 +240,14 @@ a comparison table.
 
 \begin{table}[H]
 \centering
-\caption{Reproduction of Govoni et al.\ Table 1.  Our solver operates at
+\caption{Reproduction of Govoni et al.\ Table 1.  The proposed solver operates at
 $\Delta t = 1/240\;\text{s}$ (PhysX TGS, 64 position iterations), compared
 to their explicit MSD at $\Delta t = \SI{5e-6}{s}$.}
 \label{tab:comparison}
 \begin{tabular}{@{}clccccc@{}}
 \toprule
 \textbf{Row} & \textbf{$E$ (MPa)} & \textbf{$i$}
-    & \textbf{Paper} & \textbf{Ours}
+    & \textbf{Paper} & \textbf{Mine}
     & \textbf{Max $|\omega|$ (deg/s)}
     & \textbf{Match} \\
 \midrule
@@ -262,11 +262,11 @@ to their explicit MSD at $\Delta t = \SI{5e-6}{s}$.}
 \end{table}
 
 \noindent
-All five configurations remain stable under our solver.  Rows 1, 2a, 2b, and
+All five configurations remain stable under my solver.  Rows 1, 2a, 2b, and
 4 reproduce the paper's findings directly.
 
 \textbf{Row~3 is the key result}: where Govoni's explicit integrator diverges
-after \SI{0.4}{s}, our PhysX TGS solver remains stable with a peak angular
+after \SI{0.4}{s}, my PhysX TGS solver remains stable with a peak angular
 velocity of only \SI{257}{deg/s} --- well within normal operating range.  This
 is expected: PhysX TGS is an \emph{implicit} iterative solver that naturally
 handles stiff systems, whereas an explicit integrator requires
@@ -281,7 +281,7 @@ configurations.
 \caption{Peak angular velocity recorded during each Govoni sweep
 configuration.  All values remain far below the divergence threshold
 (\SI{e4}{deg/s}).  Row~3 (red border) is the configuration where
-Govoni's explicit integrator diverges, yet our solver produces peak
+Govoni's explicit integrator diverges, yet my solver produces peak
 velocities comparable to the stable configurations.}
 \label{fig:max_omega}
 \end{figure}
@@ -289,7 +289,7 @@ velocities comparable to the stable configurations.}
 
 \subsection{Govoni Sweep: Dynamic Response}
 
-Beyond binary stability, we examine the transient response of each
+Beyond binary stability, I examine the transient response of each
 configuration after the \SI{5}{mm} step displacement.
 
 \begin{figure}[H]
@@ -298,7 +298,7 @@ configuration after the \SI{5}{mm} step displacement.
 \caption{Midpoint vertical displacement relative to initial position for all
 five Govoni configurations.  Stiffer cables (higher $E$) respond faster but
 with smaller amplitude.  Row~3 (dashed red) and Row~4 (dotted purple) are
-identical in our solver since both use the same material; the paper's
+identical in my solver since both use the same material; the paper's
 instability at Row~3 was a solver limitation, not a physical phenomenon.}
 \label{fig:govoni_midpoint}
 \end{figure}
@@ -434,7 +434,7 @@ CCD                        &                    & Enabled         \\
 The explicit MSD formulation used by Govoni et al.\ requires timesteps on the
 order of microseconds to remain stable with stiff materials.  At
 $\Delta t = \SI{5e-6}{s}$, simulating \SI{1}{s} of cable behaviour requires
-200{,}000 integration steps.  Our approach leverages PhysX's implicit TGS
+200{,}000 integration steps.  My approach leverages PhysX's implicit TGS
 solver, which remains stable at $\Delta t \approx \SI{4e-3}{s}$ ---
 approximately $800\times$ larger.  This makes real-time or faster-than-real-time
 simulation feasible, which is essential for reinforcement learning where
@@ -444,7 +444,7 @@ millions of timesteps of experience are needed.
 
 A key concern raised by Govoni et al.\ is that domain randomisation over
 material properties (varying $E$ during RL training) can produce unstable
-simulation samples that silently corrupt the training set.  Our results
+simulation samples that silently corrupt the training set.  My results
 show that this is a solver-specific problem, not a fundamental limitation:
 the PhysX TGS solver remains stable across the entire tested range
 ($E \in [12.6, 1002.6]$~MPa) at a practical timestep.  This means
@@ -483,7 +483,7 @@ without the need for per-sample timestep adaptation.
           (e.g., routing a cable through a set of clips).
     \item \textbf{Reinforcement learning}: leverage domain randomisation
           over material parameters ($E$, $\zeta$, cable length) to train
-          robust manipulation policies.  Our stability results confirm that
+          robust manipulation policies.  My stability results confirm that
           randomising $E$ up to \SI{1}{GPa} will not produce divergent
           training samples at the standard Isaac Sim timestep --- a concern
           raised explicitly by Govoni et al.

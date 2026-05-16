@@ -1,7 +1,7 @@
 # Govoni Table 1 — Reproduction Results
 
 Source paper: Govoni et al. 2025, arXiv:2504.13659.
-Sweep driver: `govoni_sweep.py` → `cable_v2.py`.
+Sweep driver: `govoni_sweep.py` → `cable.py`.
 
 Our solver: PhysX TGS, 64 position iterations, Δt = 1/240 s.
 Their solver: explicit MSD integration at Δt = 5e-6 s (or 1e-7 s for row 4).

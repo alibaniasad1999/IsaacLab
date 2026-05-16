@@ -1,9 +1,10 @@
 """
-capsule-chain cable, total length = 1 meter.
+Flexible cable connected to rigid connectors in IsaacSim.
+Automatically records 10 seconds of simulation and saves key frames for report.
 
 run:
     conda activate env_isaaclab
-    python scripts/my_experiments/cable.py
+    python scripts/my_experiments/cable_v1.py
 """
 
 from os.path import join

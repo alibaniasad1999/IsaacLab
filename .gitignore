@@ -413,3 +413,5 @@ TSWLatexianTemp*
 
 # add my frames
 scripts/my_experiments/cable_output/frames/
+# mac env
+.isaacenv/

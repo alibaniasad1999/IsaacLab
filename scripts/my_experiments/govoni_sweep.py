@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 Govoni Table 1 sweep driver  —  replicates the parameter sweep from
-Govoni et al. 2025 (arXiv:2504.13659, Table 1) using cable_v2.py.
+Govoni et al. 2025 (arXiv:2504.13659, Table 1) using cable.py.
 
 For each row in Govoni Table 1, this script:
-  1. sets the env vars consumed by cable_v2.py,
-  2. launches cable_v2.py as a subprocess (headless, no video),
+  1. sets the env vars consumed by cable.py,
+  2. launches cable.py as a subprocess (headless, no video),
   3. reads back the summary.json the subprocess writes,
   4. assembles a comparison table.
 
@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR  = Path(__file__).parent
-CABLE_V2    = SCRIPT_DIR / "cable_v2.py"
+CABLE_V2    = SCRIPT_DIR / "cable.py"
 OUTPUT_ROOT = SCRIPT_DIR / "cable_output" / "govoni_sweep"
 
 # ----------------------------------------------------------------
@@ -48,7 +48,7 @@ OUTPUT_ROOT = SCRIPT_DIR / "cable_output" / "govoni_sweep"
 # Caveat: their Δt of 5e-6 s (200 kHz) is impractical in Isaac Sim with
 # 200+ rigid bodies. We instead run at the user's working physics dt
 # (1/240 s = ~4.17e-3) using PhysX TGS with 64 position iterations, which
-# is the regime cable_v2.py is actually intended for. The point of the
+# is the regime cable.py is actually intended for. The point of the
 # sweep is to see whether *our* solver+model can handle the stiffness
 # regimes where their explicit MSD integrator fails — not to literally
 # match their Δt.
@@ -83,7 +83,7 @@ COMMON_ENV = {
 
 def run_one(row_id: str, E_MPa: float, i_disc: int,
             dt_govoni: float, dry_run: bool) -> dict | None:
-    """Run cable_v2.py for one Table 1 row and return its summary.json."""
+    """Run cable.py for one Table 1 row and return its summary.json."""
     run_dir = OUTPUT_ROOT / f"run_{row_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -199,7 +199,7 @@ def build_comparison_table(results: list[dict]) -> None:
     md_lines = []
     md_lines.append("# Govoni Table 1 — Reproduction Results\n")
     md_lines.append("Source paper: Govoni et al. 2025, arXiv:2504.13659.")
-    md_lines.append("Sweep driver: `govoni_sweep.py` → `cable_v2.py`.\n")
+    md_lines.append("Sweep driver: `govoni_sweep.py` → `cable.py`.\n")
     md_lines.append("Our solver: PhysX TGS, 64 position iterations, Δt = 1/240 s.")
     md_lines.append("Their solver: explicit MSD integration at Δt = 5e-6 s (or 1e-7 s for row 4).\n")
     md_lines.append("| " + " | ".join(headers) + " |")
@@ -233,7 +233,7 @@ def main():
     args = ap.parse_args()
 
     if not CABLE_V2.exists():
-        print(f"ERROR: cannot find cable_v2.py at {CABLE_V2}")
+        print(f"ERROR: cannot find cable.py at {CABLE_V2}")
         sys.exit(1)
 
     rows_filter = {x.strip() for x in args.rows.split(",") if x.strip()}

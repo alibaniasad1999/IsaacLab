@@ -175,7 +175,12 @@ def build_comparison_table(results: list[dict]) -> None:
             verdict = "n/a (run failed)"
         else:
             paper_is_stable = (paper_stab == "Stable")
-            verdict = "✓ matches" if (our_stab == paper_is_stable) else "✗ differs"
+            if our_stab == paper_is_stable:
+                verdict = "✓ matches"
+            elif our_stab and not paper_is_stable:
+                verdict = "★ ours stable (paper diverges)"
+            else:
+                verdict = "✗ ours unstable (paper stable)"
         rows_out.append([
             rid,
             f"{E_mpa:.1f}",

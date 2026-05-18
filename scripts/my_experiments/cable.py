@@ -70,7 +70,7 @@ ANCHOR_Z             = 2.0   # height of top anchor above ground
 # ---- Material properties (Govoni Table 1 baseline = Run #1) ----
 YOUNG_MODULUS        = float(os.environ.get("CABLE_E",           12.6e6))   # Pa
 POISSON_RATIO        = float(os.environ.get("CABLE_NU",          0.5))      # rubber
-DAMPING_RATIO        = float(os.environ.get("CABLE_ZETA",        0.2))      # ζ of critical
+DAMPING_RATIO        = float(os.environ.get("CABLE_ZETA",        0.2))      # fraction of critical damping
 
 # ---- Joint limits ----
 CONE_LIMIT_DEG       = 30.0   # safety net; soft EI/L spring does the bending work
@@ -102,8 +102,8 @@ INITIAL_KICK_VEL     = np.array([
     float(os.environ.get("CABLE_KICK_VZ", 0.0)),
 ])
 
-# ---- Stability monitor (Change 5) ----
-DIVERGENCE_OMEGA_DEG_S = 1.0e4   # any joint above this rad/s ⇒ flagged unstable
+# ---- Stability monitor ----
+DIVERGENCE_OMEGA_DEG_S = 1.0e4   # any joint above this deg/s ⇒ flagged unstable
 STABILITY_CHECK_EVERY  = 4       # render steps between checks
 
 # ---- Output / logging ----

@@ -56,7 +56,7 @@ This work develops such a model with three key goals:
     \item \textbf{Stability validation} --- the model is benchmarked against the
           systematic parameter sweep of Govoni et al.~\cite{govoni2025},
           which documents stability boundaries for mass-spring-damper (MSD)
-          cable models across different stiffness regimes.
+          cable models~\cite{lv2017} across different stiffness regimes.
     \item \textbf{Behavioural characterisation} --- dynamic cable behaviour is
           analysed through trajectory data, shape evolution, and energy
           dissipation to verify physical plausibility beyond mere stability.
@@ -88,7 +88,9 @@ for typical DLO manipulation tasks.
 \subsection{Material-Driven Parameter Derivation}
 
 Rather than hand-picking joint stiffness and damping values, I derive them
-from material properties using Euler--Bernoulli beam theory.  Given:
+from material properties using Euler--Bernoulli beam theory.  Alternative
+discrete-rod formulations~\cite{bergou2008} derive bending energies from
+material-frame curvatures rather than joint angles.  Given:
 \begin{itemize}[nosep]
     \item Young's modulus $E$ (\si{Pa}),
     \item Cable radius $r$ (\si{m}),
@@ -105,7 +107,7 @@ the joint parameters are computed as:
     I_{\text{rot}} &= \tfrac{1}{3}\, m_{\text{seg}}\, L_{\text{seg}}^2
         & &\text{(rotational inertia of segment)} \label{eq:Irot}\\[4pt]
     C_{\text{crit}} &= 2\sqrt{K_{\text{bend}} \cdot I_{\text{rot}}}
-        & &\text{(critical damping coefficient)} \label{eq:Ccrit}\\[4pt]
+        & &\text{(critical damping~\cite{bhasin2006})} \label{eq:Ccrit}\\[4pt]
     C &= \zeta \cdot C_{\text{crit}}
         & &\text{(joint damping, \si{N.m.s/rad})} \label{eq:C}
 \end{align}
@@ -173,9 +175,11 @@ Key observations from Figure~\ref{fig:stiffness_landscape}:
           for $E$ up to approximately \SI{25}{MPa} (rubber regime); stiffer plastic
           cables exceed Nyquist at $N = 200$ and would benefit from coarser
           discretisation.
-    \item The natural frequency plot explains why Govoni's explicit integrator
-          fails at $E = \SI{1002.6}{MPa}$ with $i = 10$: the joint natural
-          frequency exceeds $10^4$~Hz, far above their integration rate.
+    \item The high-stiffness regime requires explicit integrators to use
+          timesteps $\Delta t \propto 1/\sqrt{k}$, which is exactly what
+          Govoni's Row~3 vs.\ Row~4 result demonstrates: stability is
+          recovered only by reducing $\Delta t$ from \SI{5e-6}{s} to
+          \SI{1e-7}{s}.
 \end{itemize}
 
 
@@ -345,7 +349,7 @@ lateral (X) displacement shows the cable swinging in its pendulum mode, which
 is damped primarily by translational drag (LINEAR\_DAMPING in PhysX) rather
 than by joint stiffness; per-joint angular damping dissipates bending energy
 but couples weakly to bulk pendulum motion.  \textbf{Bottom:} vertical (Z)
-positions show the tip oscillating around its catenary equilibrium with small
+positions show the tip oscillating around its vertical rest position with small
 amplitude, with higher-frequency bending modes well-damped at $\zeta = 0.2$.}
 \label{fig:tip_trajectory}
 \end{figure}
@@ -436,9 +440,11 @@ order of microseconds to remain stable with stiff materials.  At
 $\Delta t = \SI{5e-6}{s}$, simulating \SI{1}{s} of cable behaviour requires
 200{,}000 integration steps.  My approach leverages PhysX's implicit TGS
 solver, which remains stable at $\Delta t \approx \SI{4e-3}{s}$ ---
-approximately $800\times$ larger.  This makes real-time or faster-than-real-time
-simulation feasible, which is essential for reinforcement learning where
-millions of timesteps of experience are needed.
+approximately $800\times$ larger.  For Row~4, where Govoni reduces
+$\Delta t$ to $\SI{1e-7}{s}$ to recover stability, my solver runs at a
+timestep approximately $41{,}000\times$ larger.  This makes real-time or
+faster-than-real-time simulation feasible, which is essential for
+reinforcement learning where millions of timesteps of experience are needed.
 
 \subsection{Implications for Domain Randomisation}
 

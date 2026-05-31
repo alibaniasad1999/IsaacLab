@@ -255,8 +255,31 @@ def create_capsule(index: int) -> DynamicCapsule:
     physx_rb.CreateLinearDampingAttr().Set(LINEAR_DAMPING)
     physx_rb.CreateAngularDampingAttr().Set(ANGULAR_DAMPING)
     physx_rb.CreateEnableCCDAttr().Set(ENABLE_CCD)
+    # CCD = Continuous Collision Detection.
+    # Without CCD, PhysX only checks for collisions at discrete time steps.
+    # Fast-moving thin bodies (like our 1.5 mm capsules) can "tunnel" through
+    # obstacles between steps if they move further than their own size in one
+    # step. CCD sweeps the body's trajectory and catches collisions that would
+    # otherwise be missed. Costs ~1.5-2x in compute but essential for cables.
+
     physx_rb.CreateSleepThresholdAttr().Set(1e-5)
+    # Sleep threshold (units: kinetic energy, Joules).
+    # When a body's kinetic energy stays below this value for several
+    # consecutive steps, PhysX puts it to "sleep" — skips it entirely in the
+    # solver until something wakes it up. Saves CPU on settled bodies.
+    # Default is ~5e-3. Our value (1e-5) is 500x smaller, meaning capsules
+    # only sleep when they are very nearly motionless. This preserves the
+    # smooth final settling of the cable; a higher threshold would freeze
+    # capsules in a not-quite-equilibrium pose.
+
     physx_rb.CreateStabilizationThresholdAttr().Set(1e-6)
+    # Stabilization threshold (units: kinetic energy, Joules).
+    # When a body's kinetic energy drops below this — but it's not yet
+    # asleep — PhysX applies extra damping to kill numerical jitter caused
+    # by accumulated floating-point error. Set smaller than the sleep
+    # threshold (1e-6 < 1e-5) so that stabilization is triggered only for
+    # the very-slow regime; faster bodies run with normal solver dynamics.
+    # Effect: a settled cable rests cleanly instead of visibly trembling.
     return capsule
 
 
@@ -270,6 +293,7 @@ def create_link_joint(index: int):
     """
     joint_path = f"/World/link_joint_{index}"
     joint = UsdPhysics.Joint.Define(stage, joint_path)
+    # sdf -> Scene Description Foundations
     joint.CreateBody0Rel().SetTargets([Sdf.Path(f"/World/capsule_{index}")])
     joint.CreateBody1Rel().SetTargets([Sdf.Path(f"/World/capsule_{index + 1}")])
     joint.CreateLocalPos0Attr().Set(Gf.Vec3f(0.0, 0.0, -(LINK_HEIGHT / 2.0 + LINK_RADIUS)))
@@ -287,7 +311,7 @@ def create_link_joint(index: int):
         lim.CreateHighAttr().Set(-1.0)   # inverted ⇒ axis locked
 
     # Bending DOFs: cone limit (safety net) + soft EI/L spring & damper
-    for axis in ("rotY", "rotZ"):
+    for axis in ("rotX", "rotY"):
         lim = UsdPhysics.LimitAPI.Apply(prim, axis)
         lim.CreateLowAttr().Set(-CONE_LIMIT_DEG)
         lim.CreateHighAttr().Set(+CONE_LIMIT_DEG)
@@ -298,7 +322,7 @@ def create_link_joint(index: int):
         drive.CreateStiffnessAttr().Set(JOINT_STIFFNESS)
         drive.CreateMaxForceAttr().Set(1e6)
 
-    # rotX (twist) is intentionally left FREE — no limit, no drive
+    # rotZ (twist) is intentionally left FREE — no limit, no drive
 
 
 def attach_cable_to_top_connector():
@@ -462,14 +486,14 @@ FRAMES_DIR = OUTPUT_DIR / "frames"
 if RECORD_VIDEO and rgb_annotator is not None:
     FRAMES_DIR.mkdir(exist_ok=True)
 
-step_count          = 0
-frames_written      = 0
-recording_done      = not RECORD_VIDEO       # if recording off, treat as already done
-instability_at      = None
-max_omega_seen      = 0.0
-key_frame_steps     = [int(t / RENDER_DT) for t in KEY_FRAME_TIMES]
-total_record_steps  = int(MAX_SIM_TIME / RENDER_DT)
-total_steps         = total_record_steps
+step_count         = 0
+frames_written     = 0
+recording_done     = not RECORD_VIDEO       # if recording off, treat as already done
+instability_at     = None
+max_omega_seen     = 0.0
+key_frame_steps    = [int(t / RENDER_DT) for t in KEY_FRAME_TIMES]
+total_record_steps = int(MAX_SIM_TIME / RENDER_DT)
+total_steps        = total_record_steps
 
 print(f"\nSimulating up to t = {MAX_SIM_TIME}s ({total_steps} render steps)...\n")
 

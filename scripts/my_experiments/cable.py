@@ -6,13 +6,13 @@ Aligned with Govoni et al. 2025 (arXiv:2504.13659):
   1. Material-driven parameters: JOINT_STIFFNESS and JOINT_DAMPING are derived
      from Young's modulus + geometry + damping ratio via beam theory
      (K_bend = EI / L_segment).
-  2. Cone limit widened (30°). The soft EI/L spring does the bending work;
+  2. Cone limit widened (30deg). The soft EI/L spring does the bending work;
      the cone limit is a safety net.
   3. Twist DOF freed (Govoni: "Twisting springs are excluded").
      No twist limit, no rotX drive.
   4. Two experiment modes:
-       * "hanging_kick"    — top fixed, bottom kicked, obstacle present.
-       * "both_ends_fixed" — Govoni-style stability test: top fixed, bottom
+       * "hanging_kick"    -- top fixed, bottom kicked, obstacle present.
+       * "both_ends_fixed" -- Govoni-style stability test: top fixed, bottom
                              kinematic, 5 mm step displacement after settling.
   5. Per-step CSV logging of capsule positions + stability monitor that flags
      divergence and writes summary.json. Designed to be driven by
@@ -56,7 +56,7 @@ import omni.replicator.core as rep
 
 
 # ===============================================================
-# 1. CONFIGURATION  (env vars override defaults — used by sweep)
+# 1. CONFIGURATION  (env vars override defaults -- used by sweep)
 # ===============================================================
 
 # ---- Cable geometry ----
@@ -67,14 +67,22 @@ TOTAL_CABLE_MASS     = float(os.environ.get("CABLE_MASS",        1.0))
 
 ANCHOR_Z             = 2.0   # height of top anchor above ground
 
-# ---- Material properties (Govoni Table 1 baseline = Run #1) ----
-YOUNG_MODULUS        = float(os.environ.get("CABLE_E",           12.6e6))   # Pa
-POISSON_RATIO        = float(os.environ.get("CABLE_NU",          0.5))      # rubber
+# ---- Material properties (default: PUR / polyurethane robot cable) ----
+YOUNG_MODULUS        = float(os.environ.get("CABLE_E",           30e6))     # Pa  (PUR ~ 30 MPa)
+POISSON_RATIO        = float(os.environ.get("CABLE_NU",          0.45))     # PUR
 DAMPING_RATIO        = float(os.environ.get("CABLE_ZETA",        0.2))      # fraction of critical damping
 
+# ---- Translational MSD springs (axial elasticity) ----
+# k_s = EA / L_seg  (Govoni Eq. 1).  Set CABLE_AXIAL=0 to lock translations.
+ENABLE_AXIAL_SPRING  = os.environ.get("CABLE_AXIAL", "1") == "1"
+AXIAL_DAMPING_RATIO  = float(os.environ.get("CABLE_AXIAL_ZETA",  0.3))
+
+# ---- Legacy mode (v1 hand-tuned parameters for comparison) ----
+LEGACY_MODE          = os.environ.get("CABLE_LEGACY", "0") == "1"
+
 # ---- Joint limits ----
-CONE_LIMIT_DEG       = 30.0   # safety net; soft EI/L spring does the bending work
-# TWIST limit and rotX drive are intentionally removed (Govoni excludes twisting)
+CONE_LIMIT_DEG       = 8.0 if LEGACY_MODE else 30.0
+TWIST_LIMIT_DEG      = 5.8 if LEGACY_MODE else None  # None = free twist
 
 # ---- PhysX rigid-body drag (acts like air resistance, separate from EI/L) ----
 LINEAR_DAMPING       = 0.05
@@ -94,7 +102,7 @@ EXPERIMENT_MODE      = os.environ.get("CABLE_MODE", "hanging_kick")
 assert EXPERIMENT_MODE in ("hanging_kick", "both_ends_fixed"), \
     f"Unknown CABLE_MODE: {EXPERIMENT_MODE}"
 
-STEP_DISPLACEMENT_M  = float(os.environ.get("CABLE_STEP_DISP",   5e-3))   # 5 mm — matches Govoni
+STEP_DISPLACEMENT_M  = float(os.environ.get("CABLE_STEP_DISP",   5e-3))   # 5 mm -- matches Govoni
 SETTLE_SECONDS       = float(os.environ.get("CABLE_SETTLE",      0.5))    # settle before step
 INITIAL_KICK_VEL     = np.array([
     float(os.environ.get("CABLE_KICK_VX", 1.5)),
@@ -103,7 +111,7 @@ INITIAL_KICK_VEL     = np.array([
 ])
 
 # ---- Stability monitor ----
-DIVERGENCE_OMEGA_DEG_S = 1.0e4   # any joint above this deg/s ⇒ flagged unstable
+DIVERGENCE_OMEGA_DEG_S = 1.0e4   # any joint above this deg/s => flagged unstable
 STABILITY_CHECK_EVERY  = 4       # render steps between checks
 
 # ---- Output / logging ----
@@ -130,22 +138,36 @@ WARMUP_STEPS    = 10
 
 
 # ===============================================================
-# 2. DERIVED PARAMETERS  (Change 1: material → joint coefficients)
+# 2. DERIVED PARAMETERS
 # ===============================================================
 SEGMENT_SPACING   = TOTAL_CABLE_LENGTH / NUM_LINKS
 LINK_HEIGHT       = max(SEGMENT_SPACING - 2.0 * LINK_RADIUS, 1e-4)
 LINK_MASS         = TOTAL_CABLE_MASS / NUM_LINKS
 
 # Beam-theory bending stiffness:  k_b = EI / L_segment
-LINK_AREA_MOMENT  = math.pi * LINK_RADIUS**4 / 4.0          # I = π r⁴ / 4  [m⁴]
-EI                = YOUNG_MODULUS * LINK_AREA_MOMENT        # flexural rigidity [N·m²]
-K_BEND_RAD        = EI / SEGMENT_SPACING                    # [N·m/rad]
-JOINT_STIFFNESS   = K_BEND_RAD * math.pi / 180.0            # [N·m/deg] for USD DriveAPI
+LINK_AREA_MOMENT  = math.pi * LINK_RADIUS**4 / 4.0          # I = pi r^4 / 4  [m^4]
+EI                = YOUNG_MODULUS * LINK_AREA_MOMENT        # flexural rigidity [N.m^2]
+K_BEND_RAD        = EI / SEGMENT_SPACING                    # [N.m/rad]
+JOINT_STIFFNESS   = K_BEND_RAD * math.pi / 180.0            # [N.m/deg] for USD DriveAPI
 
-# Critical-damping fraction:  C = ζ · 2·sqrt(K · I_rot)
+# Bending damping:  C = zeta . 2.sqrt(K . I_rot)
 LINK_ROT_INERTIA  = (1.0/3.0) * LINK_MASS * SEGMENT_SPACING**2   # slender rod about end
 C_CRIT_RAD        = 2.0 * math.sqrt(max(K_BEND_RAD * LINK_ROT_INERTIA, 1e-30))
-JOINT_DAMPING     = DAMPING_RATIO * C_CRIT_RAD * math.pi / 180.0  # [N·m·s/deg]
+JOINT_DAMPING     = DAMPING_RATIO * C_CRIT_RAD * math.pi / 180.0  # [N.m.s/deg]
+
+# Axial (translational) MSD springs:  k_s = EA / L_seg  (Govoni Eq. 1)
+CROSS_SECTION_AREA = math.pi * LINK_RADIUS**2                     # A = pi r^2  [m^2]
+K_AXIAL            = YOUNG_MODULUS * CROSS_SECTION_AREA / SEGMENT_SPACING  # [N/m]
+C_AXIAL_CRIT       = 2.0 * math.sqrt(max(K_AXIAL * LINK_MASS, 1e-30))
+C_AXIAL            = AXIAL_DAMPING_RATIO * C_AXIAL_CRIT           # [N.s/m]
+
+# Legacy mode: override with v1 hand-tuned values
+if LEGACY_MODE:
+    JOINT_STIFFNESS    = 0.0     # v1: no bending spring
+    JOINT_DAMPING      = 0.05    # v1: hand-picked, ~70,000x critical
+    LINEAR_DAMPING     = 0.2     # v1 values
+    ANGULAR_DAMPING    = 1.0
+    ENABLE_AXIAL_SPRING = False  # v1: locked translations
 
 
 # ===============================================================
@@ -265,7 +287,7 @@ def create_capsule(index: int) -> DynamicCapsule:
     physx_rb.CreateSleepThresholdAttr().Set(1e-5)
     # Sleep threshold (units: kinetic energy, Joules).
     # When a body's kinetic energy stays below this value for several
-    # consecutive steps, PhysX puts it to "sleep" — skips it entirely in the
+    # consecutive steps, PhysX puts it to "sleep" -- skips it entirely in the
     # solver until something wakes it up. Saves CPU on settled bodies.
     # Default is ~5e-3. Our value (1e-5) is 500x smaller, meaning capsules
     # only sleep when they are very nearly motionless. This preserves the
@@ -274,8 +296,8 @@ def create_capsule(index: int) -> DynamicCapsule:
 
     physx_rb.CreateStabilizationThresholdAttr().Set(1e-6)
     # Stabilization threshold (units: kinetic energy, Joules).
-    # When a body's kinetic energy drops below this — but it's not yet
-    # asleep — PhysX applies extra damping to kill numerical jitter caused
+    # When a body's kinetic energy drops below this -- but it's not yet
+    # asleep -- PhysX applies extra damping to kill numerical jitter caused
     # by accumulated floating-point error. Set smaller than the sleep
     # threshold (1e-6 < 1e-5) so that stabilization is triggered only for
     # the very-slow regime; faster bodies run with normal solver dynamics.
@@ -287,7 +309,7 @@ def create_link_joint(index: int):
     """D6 joint between capsule_index and capsule_{index+1}.
     Changes vs v1:
       - Cone limit on rotY/rotZ widened (configured globally).
-      - Twist (rotX) is FREE — no limit, no drive (matches Govoni).
+      - Twist (rotX) is FREE -- no limit, no drive (matches Govoni).
       - rotY/rotZ have soft EI/L spring + viscous damper from JOINT_STIFFNESS
         and JOINT_DAMPING.
     """
@@ -303,12 +325,19 @@ def create_link_joint(index: int):
 
     prim = joint.GetPrim()
 
-    # Lock all translations (cable does not stretch — this is the main
-    # difference vs Govoni's MSD model, which has soft k_s = EA/L springs)
-    for axis in ("transX", "transY", "transZ"):
-        lim = UsdPhysics.LimitAPI.Apply(prim, axis)
-        lim.CreateLowAttr().Set(1.0)
-        lim.CreateHighAttr().Set(-1.0)   # inverted ⇒ axis locked
+    # Translational DOFs: soft MSD springs (k_s = EA/L) or locked
+    if ENABLE_AXIAL_SPRING:
+        for axis in ("transX", "transY", "transZ"):
+            drive = UsdPhysics.DriveAPI.Apply(prim, axis)
+            drive.CreateTypeAttr().Set("force")
+            drive.CreateStiffnessAttr().Set(K_AXIAL)
+            drive.CreateDampingAttr().Set(C_AXIAL)
+            drive.CreateMaxForceAttr().Set(1e8)
+    else:
+        for axis in ("transX", "transY", "transZ"):
+            lim = UsdPhysics.LimitAPI.Apply(prim, axis)
+            lim.CreateLowAttr().Set(1.0)
+            lim.CreateHighAttr().Set(-1.0)   # inverted => axis locked
 
     # Bending DOFs: cone limit (safety net) + soft EI/L spring & damper
     for axis in ("rotX", "rotY"):
@@ -322,7 +351,11 @@ def create_link_joint(index: int):
         drive.CreateStiffnessAttr().Set(JOINT_STIFFNESS)
         drive.CreateMaxForceAttr().Set(1e6)
 
-    # rotZ (twist) is intentionally left FREE — no limit, no drive
+    # Twist (rotZ): free in current model, limited in legacy mode
+    if TWIST_LIMIT_DEG is not None:
+        lim = UsdPhysics.LimitAPI.Apply(prim, "rotZ")
+        lim.CreateLowAttr().Set(-TWIST_LIMIT_DEG)
+        lim.CreateHighAttr().Set(+TWIST_LIMIT_DEG)
 
 
 def attach_cable_to_top_connector():
@@ -349,7 +382,7 @@ def attach_cable_to_top_connector():
 
 def attach_cable_to_bottom_connector():
     """Single fixed joint between last capsule and bottom connector.
-    Works for both modes — in both_ends_fixed mode the bottom connector is
+    Works for both modes -- in both_ends_fixed mode the bottom connector is
     kinematic, so this fixed joint effectively pins the cable end to a
     scripted position.
     """
@@ -365,28 +398,36 @@ def attach_cable_to_bottom_connector():
 # ===============================================================
 # 5. BUILD SCENE
 # ===============================================================
+_mode_label = "LEGACY (v1 hand-tuned)" if LEGACY_MODE else "material-driven"
 print("=" * 70)
-print(f"Cable v2  —  mode = {EXPERIMENT_MODE}")
+print(f"Cable simulation  --  mode = {EXPERIMENT_MODE}  [{_mode_label}]")
 print("=" * 70)
 print(f"  links              : {NUM_LINKS}")
 print(f"  segment length     : {SEGMENT_SPACING*1000:.3f} mm")
 print(f"  capsule radius     : {LINK_RADIUS*1000:.2f} mm")
 print(f"  link mass          : {LINK_MASS*1000:.3f} g")
-print(f"  cone limit         : {CONE_LIMIT_DEG}°  (twist: FREE)")
-print(f"  physics dt         : {PHYSICS_DT*1e6:.3f} µs   ({1.0/PHYSICS_DT:.1f} Hz)")
+_twist = f"{TWIST_LIMIT_DEG}deg" if TWIST_LIMIT_DEG is not None else "FREE"
+print(f"  cone limit         : {CONE_LIMIT_DEG}deg  (twist: {_twist})")
+print(f"  physics dt         : {PHYSICS_DT*1e6:.3f} us   ({1.0/PHYSICS_DT:.1f} Hz)")
 print(f"  render  dt         : {RENDER_DT*1e3:.3f} ms   ({1.0/RENDER_DT:.1f} Hz)")
 print("  ---- Material -----")
 print(f"  Young's modulus E  : {YOUNG_MODULUS/1e6:.3f} MPa")
-print(f"  Poisson ratio  ν   : {POISSON_RATIO}")
-print(f"  Damping ratio  ζ   : {DAMPING_RATIO}")
+print(f"  Poisson ratio  nu   : {POISSON_RATIO}")
+print(f"  Damping ratio  zeta   : {DAMPING_RATIO}")
 print("  ---- Derived ------")
-print(f"  I (area moment)    : {LINK_AREA_MOMENT:.3e} m⁴")
-print(f"  EI (flexural rig.) : {EI:.3e} N·m²")
-print(f"  K_bend per rad     : {K_BEND_RAD:.3e} N·m/rad")
-print(f"  JOINT_STIFFNESS    : {JOINT_STIFFNESS:.3e} N·m/deg")
-print(f"  I_rot per link     : {LINK_ROT_INERTIA:.3e} kg·m²")
-print(f"  C_critical per rad : {C_CRIT_RAD:.3e} N·m·s/rad")
-print(f"  JOINT_DAMPING      : {JOINT_DAMPING:.3e} N·m·s/deg")
+print(f"  I (area moment)    : {LINK_AREA_MOMENT:.3e} m^4")
+print(f"  EI (flexural rig.) : {EI:.3e} N.m^2")
+print(f"  K_bend per rad     : {K_BEND_RAD:.3e} N.m/rad")
+print(f"  JOINT_STIFFNESS    : {JOINT_STIFFNESS:.3e} N.m/deg")
+print(f"  I_rot per link     : {LINK_ROT_INERTIA:.3e} kg.m^2")
+print(f"  C_critical per rad : {C_CRIT_RAD:.3e} N.m.s/rad")
+print(f"  JOINT_DAMPING      : {JOINT_DAMPING:.3e} N.m.s/deg")
+print("  ---- Axial MSD ----")
+print(f"  axial springs      : {'ON' if ENABLE_AXIAL_SPRING else 'OFF (locked)'}")
+if ENABLE_AXIAL_SPRING:
+    print(f"  cross-section A    : {CROSS_SECTION_AREA:.3e} m^2")
+    print(f"  K_axial (EA/L)     : {K_AXIAL:.3e} N/m")
+    print(f"  C_axial            : {C_AXIAL:.3e} N.s/m")
 print("=" * 70)
 
 print("Creating top connector...")
@@ -475,7 +516,7 @@ header = ["t"] + [f"cap{i}_x" for i in LOG_CAPSULES] \
               + [f"cap{i}_y" for i in LOG_CAPSULES] \
               + [f"cap{i}_z" for i in LOG_CAPSULES]
 csv_writer.writerow(header)
-print(f"CSV log → {CSV_PATH}")
+print(f"CSV log --> {CSV_PATH}")
 print(f"  capsules logged: {LOG_CAPSULES}")
 
 
@@ -522,7 +563,7 @@ try:
                 if wmag_deg > DIVERGENCE_OMEGA_DEG_S:
                     instability_at = sim_time
                     print(f"  *** INSTABILITY  t={sim_time:.4f}s "
-                          f"capsule {idx} |ω|={wmag_deg:.1e} deg/s ***")
+                          f"capsule {idx} |omega|={wmag_deg:.1e} deg/s ***")
                     break
 
         # --- Recording (video frames + key frames) ---
@@ -563,7 +604,7 @@ try:
             pos_bot, _ = bottom_connector.get_world_pose()
             tag = "UNSTABLE" if instability_at is not None else "  OK   "
             print(f"[{tag}] t={sim_time:5.2f}s "
-                  f"max|ω|={max_omega_seen:.2e} deg/s "
+                  f"max|omega|={max_omega_seen:.2e} deg/s "
                   f"bot=({pos_bot[0]:+.4f},{pos_bot[1]:+.4f},{pos_bot[2]:+.4f})")
 
 except KeyboardInterrupt:
@@ -577,6 +618,7 @@ finally:
     # 10. SUMMARY JSON  (consumed by govoni_sweep.py)
     # ============================================================
     summary = {
+        "legacy_mode":          LEGACY_MODE,
         "experiment_mode":      EXPERIMENT_MODE,
         "num_links":            NUM_LINKS,
         "total_cable_length_m": TOTAL_CABLE_LENGTH,
@@ -586,6 +628,9 @@ finally:
         "render_dt_s":          RENDER_DT,
         "joint_stiffness_Nm_per_deg":  JOINT_STIFFNESS,
         "joint_damping_Nms_per_deg":   JOINT_DAMPING,
+        "axial_spring_enabled":        ENABLE_AXIAL_SPRING,
+        "axial_stiffness_N_per_m":     K_AXIAL if ENABLE_AXIAL_SPRING else 0.0,
+        "axial_damping_Ns_per_m":      C_AXIAL if ENABLE_AXIAL_SPRING else 0.0,
         "cone_limit_deg":       CONE_LIMIT_DEG,
         "total_sim_time_s":     step_count * RENDER_DT,
         "stable":               (instability_at is None),
@@ -599,7 +644,7 @@ finally:
     print(f"  stable           : {summary['stable']}")
     if instability_at is not None:
         print(f"  instability_at_s : {instability_at:.4f}")
-    print(f"  max |ω| (deg/s)  : {max_omega_seen:.3e}")
+    print(f"  max |omega| (deg/s)  : {max_omega_seen:.3e}")
 
     simulation_app.close()
 

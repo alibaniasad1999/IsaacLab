@@ -1,0 +1,8 @@
+Criterion,Capsule-chain,Deformable body,Notes
+Stability (stayed stable?),Stable,n/a,Both should stay stable at dt=1/240 s
+Inextensibility error (mm),0.00 mm,n/a,Capsule = 0 by design; deformable stretches
+Two-robot span error (mm),n/a,n/a,Lower = stiffer coupling between arms
+Peak reaction force (proxy),n/a,n/a,Force transmitted to follower arm
+Axial elasticity,No (rigid links),Yes (FEM),Deformable models stretching physically
+Self-collision,Approx (capsule contacts),Native (FEM self-collision),Deformable handles knots/loops better
+Compute cost,Low-moderate,High (FEM + remeshing),Capsule cheaper for many envs (RL)

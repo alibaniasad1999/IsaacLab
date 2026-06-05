@@ -20,7 +20,7 @@ Aligned with Govoni et al. 2025 (arXiv:2504.13659):
 
 Run (defaults: hanging_kick mode, 200 links, soft rubber):
     conda activate env_isaaclab
-    python scripts/my_experiments/cable.py
+    python scripts/cable_simulation/cable.py
 
 Run a Govoni-style stability test (no GUI, no video, short):
     CABLE_MODE=both_ends_fixed CABLE_HEADLESS=1 CABLE_RECORD=0 \

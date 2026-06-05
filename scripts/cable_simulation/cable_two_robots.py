@@ -17,12 +17,12 @@ in compare_methods.py.
 
 Run:
     conda activate env_isaaclab
-    python scripts/my_experiments/cable_two_robots.py
-    CABLE_METHOD=deformable python scripts/my_experiments/cable_two_robots.py
+    python scripts/cable_simulation/cable_two_robots.py
+    CABLE_METHOD=deformable python scripts/cable_simulation/cable_two_robots.py
 
 Headless / sweep:
     CABLE_HEADLESS=1 CABLE_RECORD=0 CABLE_MAX_TIME=4.0 \
-        python scripts/my_experiments/cable_two_robots.py
+        python scripts/cable_simulation/cable_two_robots.py
 """
 
 import argparse

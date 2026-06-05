@@ -8,7 +8,7 @@
 #   - pdflatex installed
 #
 # Usage:
-#   cd scripts/my_experiments
+#   cd scripts/cable_simulation
 #   chmod +x run_all.sh
 #   ./run_all.sh
 #

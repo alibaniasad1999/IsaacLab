@@ -15,15 +15,15 @@ is free. Same two experiment modes as cable.py:
 
 Run:
     conda activate env_isaaclab
-    python scripts/my_experiments/cable_deformable.py
+    python scripts/cable_simulation/cable_deformable.py
 
 Headless / sweep mode:
     CABLE_HEADLESS=1 CABLE_RECORD=0 CABLE_MAX_TIME=2.0 \
-        python scripts/my_experiments/cable_deformable.py
+        python scripts/cable_simulation/cable_deformable.py
 
 Compare with capsule-chain:
-    python scripts/my_experiments/cable_deformable.py
-    python scripts/my_experiments/cable.py
+    python scripts/cable_simulation/cable_deformable.py
+    python scripts/cable_simulation/cable.py
 """
 
 import argparse

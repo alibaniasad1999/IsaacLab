@@ -339,11 +339,20 @@ def create_link_joint(index: int):
             lim.CreateLowAttr().Set(1.0)
             lim.CreateHighAttr().Set(-1.0)   # inverted => axis locked
 
-    # Bending DOFs: cone limit (safety net) + soft EI/L spring & damper
-    for axis in ("rotX", "rotY"):
-        lim = UsdPhysics.LimitAPI.Apply(prim, axis)
-        lim.CreateLowAttr().Set(-CONE_LIMIT_DEG)
-        lim.CreateHighAttr().Set(+CONE_LIMIT_DEG)
+    # Bending = the two SWING axes (rotY, rotZ): soft EI/L spring + damper.
+    #
+    # PhysX caveat: a HARD cone limit on both swings forms a "pyramid". When
+    # the twist axis is FREE (current model, per Govoni) that pyramid pairs
+    # with an unconstrained twist and PhysX rejects it as "double pyramid
+    # mode not supported". So in the current model we rely on the spring
+    # drive alone (no hard swing limit) -- which is the correct Govoni MSD
+    # approach anyway. Legacy mode keeps the hard cone limit AND a hard twist
+    # limit (the v1 configuration, which PhysX accepts).
+    for axis in ("rotY", "rotZ"):
+        if LEGACY_MODE:
+            lim = UsdPhysics.LimitAPI.Apply(prim, axis)
+            lim.CreateLowAttr().Set(-CONE_LIMIT_DEG)
+            lim.CreateHighAttr().Set(+CONE_LIMIT_DEG)
 
         drive = UsdPhysics.DriveAPI.Apply(prim, axis)
         drive.CreateTypeAttr().Set("force")
@@ -351,9 +360,10 @@ def create_link_joint(index: int):
         drive.CreateStiffnessAttr().Set(JOINT_STIFFNESS)
         drive.CreateMaxForceAttr().Set(1e6)
 
-    # Twist (rotZ): free in current model, limited in legacy mode
+    # Twist (rotX): free in current model (Govoni excludes twist),
+    # limited only in legacy mode.
     if TWIST_LIMIT_DEG is not None:
-        lim = UsdPhysics.LimitAPI.Apply(prim, "rotZ")
+        lim = UsdPhysics.LimitAPI.Apply(prim, "rotX")
         lim.CreateLowAttr().Set(-TWIST_LIMIT_DEG)
         lim.CreateHighAttr().Set(+TWIST_LIMIT_DEG)
 
@@ -373,11 +383,26 @@ def attach_cable_to_top_connector():
         lim.CreateLowAttr().Set(1.0)
         lim.CreateHighAttr().Set(-1.0)
 
+    # Bending: soft spring drive (same as link joints). Hard cone limit only
+    # in legacy mode -- pairing a hard swing pyramid with a free twist
+    # triggers PhysX "double pyramid mode not supported".
     for axis in ("rotY", "rotZ"):
-        lim = UsdPhysics.LimitAPI.Apply(prim, axis)
-        lim.CreateLowAttr().Set(-CONE_LIMIT_DEG)
-        lim.CreateHighAttr().Set(+CONE_LIMIT_DEG)
-    # twist free
+        if LEGACY_MODE:
+            lim = UsdPhysics.LimitAPI.Apply(prim, axis)
+            lim.CreateLowAttr().Set(-CONE_LIMIT_DEG)
+            lim.CreateHighAttr().Set(+CONE_LIMIT_DEG)
+
+        drive = UsdPhysics.DriveAPI.Apply(prim, axis)
+        drive.CreateTypeAttr().Set("force")
+        drive.CreateDampingAttr().Set(JOINT_DAMPING)
+        drive.CreateStiffnessAttr().Set(JOINT_STIFFNESS)
+        drive.CreateMaxForceAttr().Set(1e6)
+
+    # Twist (rotX): free in current model, limited only in legacy mode.
+    if TWIST_LIMIT_DEG is not None:
+        lim = UsdPhysics.LimitAPI.Apply(prim, "rotX")
+        lim.CreateLowAttr().Set(-TWIST_LIMIT_DEG)
+        lim.CreateHighAttr().Set(+TWIST_LIMIT_DEG)
 
 
 def attach_cable_to_bottom_connector():

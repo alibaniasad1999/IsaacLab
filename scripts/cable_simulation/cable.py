@@ -1,30 +1,29 @@
 """
-Flexible cable with rigid connectors in Isaac Sim.
+Flexible cable with rigid connectors in Isaac Sim (base capsule-chain model).
 
-Aligned with Govoni et al. 2025 (arXiv:2504.13659):
+Design:
 
   1. Material-driven parameters: JOINT_STIFFNESS and JOINT_DAMPING are derived
      from Young's modulus + geometry + damping ratio via beam theory
      (K_bend = EI / L_segment).
-  2. Cone limit widened (30deg). The soft EI/L spring does the bending work;
-     the cone limit is a safety net.
-  3. Twist DOF freed (Govoni: "Twisting springs are excluded").
-     No twist limit, no rotX drive.
-  4. Two experiment modes:
+  2. Bending is provided by a soft EI/L spring drive on the two swing axes.
+  3. Twist DOF is free (no twist limit, no rotX drive).
+  4. Axial elasticity via translational MSD springs (k_s = EA / L_segment),
+     or locked translations when CABLE_AXIAL=0.
+  5. Two experiment modes:
        * "hanging_kick"    -- top fixed, bottom kicked, obstacle present.
-       * "both_ends_fixed" -- Govoni-style stability test: top fixed, bottom
-                             kinematic, 5 mm step displacement after settling.
-  5. Per-step CSV logging of capsule positions + stability monitor that flags
-     divergence and writes summary.json. Designed to be driven by
-     govoni_sweep.py via environment variables.
+       * "both_ends_fixed" -- stability test: top fixed, bottom kinematic,
+                             5 mm step displacement after a short settle.
+  6. Per-step CSV logging of capsule positions + stability monitor that flags
+     divergence and writes summary.json.
 
-Run (defaults: hanging_kick mode, 200 links, soft rubber):
+Run (defaults: hanging_kick mode, 200 links):
     conda activate env_isaaclab
     python scripts/cable_simulation/cable.py
 
-Run a Govoni-style stability test (no GUI, no video, short):
+Run a step-displacement stability test (no GUI, no video, short):
     CABLE_MODE=both_ends_fixed CABLE_HEADLESS=1 CABLE_RECORD=0 \
-        CABLE_NUM_LINKS=10 CABLE_E=1002.6e6 CABLE_PHYSICS_DT=5e-6 \
+        CABLE_NUM_LINKS=10 CABLE_E=1e9 CABLE_PHYSICS_DT=5e-6 \
         CABLE_MAX_TIME=1.0 python cable.py
 """
 
@@ -73,7 +72,7 @@ POISSON_RATIO        = float(os.environ.get("CABLE_NU",          0.45))     # PU
 DAMPING_RATIO        = float(os.environ.get("CABLE_ZETA",        0.2))      # fraction of critical damping
 
 # ---- Translational MSD springs (axial elasticity) ----
-# k_s = EA / L_seg  (Govoni Eq. 1).  Set CABLE_AXIAL=0 to lock translations.
+# k_s = EA / L_seg  (axial stiffness).  Set CABLE_AXIAL=0 to lock translations.
 ENABLE_AXIAL_SPRING  = os.environ.get("CABLE_AXIAL", "1") == "1"
 AXIAL_DAMPING_RATIO  = float(os.environ.get("CABLE_AXIAL_ZETA",  0.3))
 
@@ -102,7 +101,7 @@ EXPERIMENT_MODE      = os.environ.get("CABLE_MODE", "hanging_kick")
 assert EXPERIMENT_MODE in ("hanging_kick", "both_ends_fixed"), \
     f"Unknown CABLE_MODE: {EXPERIMENT_MODE}"
 
-STEP_DISPLACEMENT_M  = float(os.environ.get("CABLE_STEP_DISP",   5e-3))   # 5 mm -- matches Govoni
+STEP_DISPLACEMENT_M  = float(os.environ.get("CABLE_STEP_DISP",   5e-3))   # 5 mm step input
 SETTLE_SECONDS       = float(os.environ.get("CABLE_SETTLE",      0.5))    # settle before step
 INITIAL_KICK_VEL     = np.array([
     float(os.environ.get("CABLE_KICK_VX", 1.5)),
@@ -155,7 +154,7 @@ LINK_ROT_INERTIA  = (1.0/3.0) * LINK_MASS * SEGMENT_SPACING**2   # slender rod a
 C_CRIT_RAD        = 2.0 * math.sqrt(max(K_BEND_RAD * LINK_ROT_INERTIA, 1e-30))
 JOINT_DAMPING     = DAMPING_RATIO * C_CRIT_RAD * math.pi / 180.0  # [N.m.s/deg]
 
-# Axial (translational) MSD springs:  k_s = EA / L_seg  (Govoni Eq. 1)
+# Axial (translational) MSD springs:  k_s = EA / L_seg
 CROSS_SECTION_AREA = math.pi * LINK_RADIUS**2                     # A = pi r^2  [m^2]
 K_AXIAL            = YOUNG_MODULUS * CROSS_SECTION_AREA / SEGMENT_SPACING  # [N/m]
 C_AXIAL_CRIT       = 2.0 * math.sqrt(max(K_AXIAL * LINK_MASS, 1e-30))
@@ -309,7 +308,7 @@ def create_link_joint(index: int):
     """D6 joint between capsule_index and capsule_{index+1}.
     Changes vs v1:
       - Cone limit on rotY/rotZ widened (configured globally).
-      - Twist (rotX) is FREE -- no limit, no drive (matches Govoni).
+      - Twist (rotX) is FREE -- no limit, no drive.
       - rotY/rotZ have soft EI/L spring + viscous damper from JOINT_STIFFNESS
         and JOINT_DAMPING.
     """
@@ -342,11 +341,11 @@ def create_link_joint(index: int):
     # Bending = the two SWING axes (rotY, rotZ): soft EI/L spring + damper.
     #
     # PhysX caveat: a HARD cone limit on both swings forms a "pyramid". When
-    # the twist axis is FREE (current model, per Govoni) that pyramid pairs
+    # the twist axis is FREE (current model) that pyramid pairs
     # with an unconstrained twist and PhysX rejects it as "double pyramid
     # mode not supported". So in the current model we rely on the spring
-    # drive alone (no hard swing limit) -- which is the correct Govoni MSD
-    # approach anyway. Legacy mode keeps the hard cone limit AND a hard twist
+    # drive alone (no hard swing limit) -- the correct MSD spring approach.
+    # Legacy mode keeps the hard cone limit AND a hard twist
     # limit (the v1 configuration, which PhysX accepts).
     for axis in ("rotY", "rotZ"):
         if LEGACY_MODE:
@@ -360,8 +359,7 @@ def create_link_joint(index: int):
         drive.CreateStiffnessAttr().Set(JOINT_STIFFNESS)
         drive.CreateMaxForceAttr().Set(1e6)
 
-    # Twist (rotX): free in current model (Govoni excludes twist),
-    # limited only in legacy mode.
+    # Twist (rotX): free in current model, limited only in legacy mode.
     if TWIST_LIMIT_DEG is not None:
         lim = UsdPhysics.LimitAPI.Apply(prim, "rotX")
         lim.CreateLowAttr().Set(-TWIST_LIMIT_DEG)
@@ -640,7 +638,7 @@ finally:
     print(f"\nCSV closed: {CSV_PATH}  ({step_count} rows)")
 
     # ============================================================
-    # 10. SUMMARY JSON  (consumed by govoni_sweep.py)
+    # 10. SUMMARY JSON
     # ============================================================
     summary = {
         "legacy_mode":          LEGACY_MODE,

@@ -1,6 +1,10 @@
 #!/bin/bash
 # =============================================================================
-# run_all.sh -- Run all cable experiments and generate the report PDF.
+# run_all.sh -- Run the cable experiments and build the comparison slides.
+#
+# Scope: two cable models on the same PUR material, compared head-to-head.
+#   - Base model:       rigid capsule-chain  (cable.py)
+#   - Deformable model: FEM deformable body  (cable_deformable.py)
 #
 # Prerequisites:
 #   - Isaac Sim conda environment (env_isaaclab) activated
@@ -13,14 +17,13 @@
 #   ./run_all.sh
 #
 # What it does:
-#   1. Capsule-chain hanging-kick (200 links, 10s, video)
-#   2. Capsule-chain Govoni Table 1 sweep
-#   3. Deformable body hanging-kick
-#   4. Deformable body stability test
-#   5. Two-robot manipulation test (both methods)
-#   6. Method comparison table
-#   7. Generate report + slide figures
-#   8. Compile report + slides PDF
+#   1. Capsule-chain (base) hanging-kick   (200 links, 10s, video)
+#   2. Deformable body hanging-kick
+#   3. Deformable body both-ends-fixed stability test
+#   4. Two-robot manipulation test (both models)
+#   5. Method comparison table
+#   6. Generate slide figures
+#   7. Compile comparison slides PDF
 # =============================================================================
 
 set -e
@@ -36,46 +39,37 @@ echo ""
 # ------------------------------------------------------------------
 # Step 0: Archive any old results and start clean
 # ------------------------------------------------------------------
-echo "[0/8] Clearing old results..."
+echo "[0/7] Clearing old results..."
 if [ -d cable_output ]; then
     STAMP=$(date +%Y%m%d_%H%M%S)
     mv cable_output "cable_output_archived_${STAMP}"
     echo "      Old data archived -> cable_output_archived_${STAMP}/"
 fi
 mkdir -p cable_output
-# Also clear stale figures so nothing old leaks into the PDFs
 rm -f report/figures/*.pdf
 echo "      Fresh cable_output/ and cleared report/figures/"
 echo ""
 
 # ------------------------------------------------------------------
-# Step 1: Capsule-chain hanging-kick (visual demo)
+# Step 1: Capsule-chain (base model) hanging-kick
 # ------------------------------------------------------------------
-echo "[1/8] Capsule-chain: hanging-kick (200 links, 10s, video)..."
+echo "[1/7] Capsule-chain (base): hanging-kick (200 links, 10s, video)..."
 python cable.py
 echo "      Done -> cable_output/hanging_kick/"
 echo ""
 
 # ------------------------------------------------------------------
-# Step 2: Capsule-chain Govoni sweep
+# Step 2: Deformable body hanging-kick
 # ------------------------------------------------------------------
-echo "[2/8] Capsule-chain: Govoni Table 1 sweep (5 configs)..."
-python govoni_sweep.py
-echo "      Done -> cable_output/govoni_sweep/"
-echo ""
-
-# ------------------------------------------------------------------
-# Step 3: Deformable body hanging-kick
-# ------------------------------------------------------------------
-echo "[3/8] Deformable body: hanging-kick (10s)..."
+echo "[2/7] Deformable body: hanging-kick (10s)..."
 python cable_deformable.py
 echo "      Done -> cable_output/deformable_hanging_kick/"
 echo ""
 
 # ------------------------------------------------------------------
-# Step 4: Deformable body stability test
+# Step 3: Deformable body stability test
 # ------------------------------------------------------------------
-echo "[4/8] Deformable body: both-ends-fixed stability test..."
+echo "[3/7] Deformable body: both-ends-fixed stability test..."
 CABLE_MODE=both_ends_fixed CABLE_HEADLESS=1 CABLE_RECORD=0 \
     CABLE_MAX_TIME=2.0 \
     CABLE_OUTPUT_DIR="$SCRIPT_DIR/cable_output/deformable_both_ends_fixed" \
@@ -84,9 +78,9 @@ echo "      Done -> cable_output/deformable_both_ends_fixed/"
 echo ""
 
 # ------------------------------------------------------------------
-# Step 5: Two-robot manipulation test (both methods)
+# Step 4: Two-robot manipulation test (both models)
 # ------------------------------------------------------------------
-echo "[5/8] Two-robot test: capsule-chain..."
+echo "[4/7] Two-robot test: capsule-chain..."
 CABLE_METHOD=capsule python cable_two_robots.py
 echo "      Two-robot test: deformable..."
 CABLE_METHOD=deformable python cable_two_robots.py
@@ -94,28 +88,25 @@ echo "      Done -> cable_output/two_robots_*/"
 echo ""
 
 # ------------------------------------------------------------------
-# Step 6: Build method-comparison table
+# Step 5: Build method-comparison table
 # ------------------------------------------------------------------
-echo "[6/8] Building method comparison table..."
+echo "[5/7] Building method comparison table..."
 python3 compare_methods.py
 echo "      Done -> cable_output/method_comparison/"
 echo ""
 
 # ------------------------------------------------------------------
-# Step 7: Generate figures (report + slides)
+# Step 6: Generate slide figures
 # ------------------------------------------------------------------
-echo "[7/8] Generating report + slide figures..."
-python3 report/generate_plots.py
+echo "[6/7] Generating slide figures..."
 python3 report/generate_slide_figures.py
 echo ""
 
 # ------------------------------------------------------------------
-# Step 8: Compile LaTeX report + slides
+# Step 7: Compile comparison slides PDF
 # ------------------------------------------------------------------
-echo "[8/8] Compiling report + slides PDF..."
+echo "[7/7] Compiling comparison slides PDF..."
 cd report
-pdflatex -interaction=nonstopmode cable_report.tex > /dev/null 2>&1
-pdflatex -interaction=nonstopmode cable_report.tex > /dev/null 2>&1
 pdflatex -interaction=nonstopmode cable_slides.tex > /dev/null 2>&1
 pdflatex -interaction=nonstopmode cable_slides.tex > /dev/null 2>&1
 cd ..
@@ -126,9 +117,9 @@ echo "=============================================="
 echo "  All done!"
 echo "=============================================="
 echo ""
-echo "  Report:            report/cable_report.pdf"
+echo "  Slides:            report/cable_slides.pdf"
 echo "  Capsule video:     cable_output/hanging_kick/cable_simulation.mp4"
-echo "  Govoni sweep:      cable_output/govoni_sweep/comparison.md"
 echo "  Deformable kick:   cable_output/deformable_hanging_kick/summary.json"
 echo "  Deformable fixed:  cable_output/deformable_both_ends_fixed/summary.json"
+echo "  Comparison table:  cable_output/method_comparison/comparison.md"
 echo ""

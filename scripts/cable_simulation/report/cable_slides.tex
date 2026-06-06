@@ -81,12 +81,12 @@ jacket for robot / drag-chain cables ($E \approx \SI{30}{MPa}$).
     \item Chain of $N$ rigid capsules + D6 joints
     \item Bending: $K = EI/L_{\text{seg}}$ (beam theory)
     \item Axial MSD springs: $k_s = EA/L_{\text{seg}}$
-    \item Twist DOF free (Govoni)
+    \item Twist DOF free (no twist spring)
 \end{itemize}
 \vspace{0.3cm}
-\textbf{Validated:} reproduces Govoni Table 1\\
-stays stable where their explicit solver diverges\\
-($800\times$ larger timestep).
+\textbf{Implicit PhysX TGS solver:}\\
+stable across the rubber-to-rigid range\\
+at $\Delta t = 1/240$ s.
 \end{column}
 \begin{column}{0.47\textwidth}
 \centering
@@ -211,7 +211,7 @@ RL scalability             & High (many envs) & Low \\
     arr/.style={->, thick, gray},
 ]
     \node[phase, fill=highlight!20] (p1) at (0,4.0)
-        {\textbf{Phase 1} (done): Capsule-chain model + Govoni validation};
+        {\textbf{Phase 1} (done): Capsule-chain (base) model};
     \node[phase, fill=orange!20] (p2) at (0,2.85)
         {\textbf{Phase 2} (current): Deformable body + two-robot comparison};
     \node[phase, fill=blue!15] (p3) at (0,1.7)
@@ -250,11 +250,11 @@ RL scalability             & High (many envs) & Low \\
 \begin{frame}[noframenumbering]{References}
 \small
 \begin{thebibliography}{9}
-\bibitem{govoni2025} A.~Govoni et al.,
-``Performance Analysis of a MSD DLO Model in Robotic Simulation Frameworks,''
-\textit{arXiv:2504.13659}, 2025.
 \bibitem{bergou2008} M.~Bergou et al.,
 ``Discrete Elastic Rods,'' \textit{ACM TOG (SIGGRAPH)}, 27(3), 2008.
+\bibitem{lv2017} N.~Lv et al.,
+``Physically based real-time interactive assembly simulation of cable harness,''
+\textit{J.\ Manufacturing Systems}, 43, 2017.
 \end{thebibliography}
 \end{frame}
 

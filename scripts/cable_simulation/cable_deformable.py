@@ -65,13 +65,21 @@ CABLE_DIAMETER     = 2.0 * CABLE_RADIUS
 
 # -- Material: PUR (polyurethane) robot cable --
 YOUNG_MODULUS      = float(os.environ.get("CABLE_E",          30e6))    # Pa
-POISSON_RATIO      = float(os.environ.get("CABLE_NU",         0.45))
+# NOTE: A near-incompressible Poisson ratio (PUR's true ~0.45) causes severe
+# VOLUMETRIC LOCKING in coarse hex FEM, which artificially stiffens bending.
+# 0.3 keeps the cable visibly floppy; raise it back toward 0.45 only if you
+# also raise CABLE_HEX_RES enough to avoid locking.
+POISSON_RATIO      = float(os.environ.get("CABLE_NU",         0.3))
 DENSITY            = float(os.environ.get("CABLE_DENSITY",    1100.0))  # kg/m^3 (PUR)
 ELASTICITY_DAMPING = float(os.environ.get("CABLE_EDAMP",      0.005))
 DAMPING_SCALE      = float(os.environ.get("CABLE_DSCALE",     1.0))
 
 # -- FEM resolution --
-HEX_RESOLUTION     = int(os.environ.get("CABLE_HEX_RES",     10))
+# Higher resolution = shorter, less-elongated hex elements along the cable =
+# less SHEAR LOCKING = more realistic (floppier) bending. The cost grows with
+# resolution, so this is the main accuracy/speed knob. 10 is far too coarse
+# for a 1 m x 3 mm rod (it makes the cable behave like a stiff bar).
+HEX_RESOLUTION     = int(os.environ.get("CABLE_HEX_RES",     24))
 
 # -- Solver --
 PHYSICS_DT         = float(os.environ.get("CABLE_PHYSICS_DT", 1.0/240.0))

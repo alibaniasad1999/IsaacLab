@@ -169,6 +169,33 @@ if LEGACY_MODE:
     ENABLE_AXIAL_SPRING = False  # v1: locked translations
 
 
+# ---------------------------------------------------------------
+# STABILITY GUARD  (prevents "Illegal BroadPhaseUpdateData" / explosion)
+# ---------------------------------------------------------------
+# A semi-implicit spring integrator is only stable when the physics timestep
+# resolves the stiffest spring in the system. The axial MSD springs
+# (k_s = EA/L) are by far the stiffest: single-DOF natural frequency is
+# omega_n = sqrt(k_s / m_link). In a 1D chain the highest mode reaches
+# ~2*omega_n, so stability requires dt < 2/(2*omega_n) = 1/omega_n. We target
+# half of that bound (factor 0.5 -> ~2x margin) and clamp PHYSICS_DT down if
+# the user's value is too coarse. Without this, a coarse dt (e.g. the 1/240
+# default) makes the cable explode and PhysX reports
+# "Illegal BroadPhaseUpdateData".
+if ENABLE_AXIAL_SPRING:
+    _omega_axial = math.sqrt(K_AXIAL / max(LINK_MASS, 1e-30))   # single-DOF [rad/s]
+    _omega_chain = 2.0 * _omega_axial                           # highest chain mode
+    DT_STABLE    = 0.5 * (2.0 / _omega_chain)                   # ~2x safety margin
+    if PHYSICS_DT > DT_STABLE:
+        print(f"[stability] axial spring omega_n = {_omega_axial:.1f} rad/s "
+              f"({_omega_axial/(2*math.pi):.1f} Hz); requested physics_dt="
+              f"{PHYSICS_DT*1e6:.1f} us is too coarse.")
+        print(f"[stability] clamping physics_dt -> {DT_STABLE*1e6:.1f} us "
+              f"({1.0/DT_STABLE:.0f} Hz) to keep the spring chain stable.")
+        print(f"[stability] (set CABLE_AXIAL=0 to lock axial DOFs and run "
+              f"fast at a coarse dt instead.)")
+        PHYSICS_DT = DT_STABLE
+
+
 # ===============================================================
 # 3. WORLD SETUP
 # ===============================================================

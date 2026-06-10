@@ -62,19 +62,30 @@ import omni.replicator.core as rep
 NUM_LINKS            = int(  os.environ.get("CABLE_NUM_LINKS",   200))
 TOTAL_CABLE_LENGTH   = float(os.environ.get("CABLE_LENGTH",      1.0))
 LINK_RADIUS          = float(os.environ.get("CABLE_RADIUS",      1.5e-3))  # 1.5 mm
-TOTAL_CABLE_MASS     = float(os.environ.get("CABLE_MASS",        1.0))
 
 ANCHOR_Z             = 2.0   # height of top anchor above ground
 
-# ---- Material properties (default: PUR / polyurethane robot cable) ----
-YOUNG_MODULUS        = float(os.environ.get("CABLE_E",           30e6))     # Pa  (PUR ~ 30 MPa)
-POISSON_RATIO        = float(os.environ.get("CABLE_NU",          0.45))     # PUR
-DAMPING_RATIO        = float(os.environ.get("CABLE_ZETA",        0.2))      # fraction of critical damping
+# ---- Material properties (default: flexible TPU / polyurethane robot cable) ----
+# Flexible thermoplastic polyurethane cable jacket (Shore ~85-95A):
+#   E ~ 30-50 MPa, nu ~ 0.48 (near-incompressible elastomer), rho ~ 1150 kg/m^3.
+YOUNG_MODULUS        = float(os.environ.get("CABLE_E",           40e6))     # Pa  (flexible TPU ~ 40 MPa)
+POISSON_RATIO        = float(os.environ.get("CABLE_NU",          0.48))     # near-incompressible elastomer
+DENSITY              = float(os.environ.get("CABLE_DENSITY",     1150.0))   # kg/m^3 (TPU)
+# Structural damping ratio. Flexible TPU is LIGHTLY damped (loss factor
+# tan(delta) ~ 0.05-0.1), so the realistic critical-damping fraction is small.
+# (The old value 0.2 made the cable swing as if through honey.)
+DAMPING_RATIO        = float(os.environ.get("CABLE_ZETA",        0.05))     # fraction of critical damping
+
+# ---- Cable mass: derived from density x volume (NOT hardcoded) ----
+# A 1 m x 3 mm PUR cable physically weighs ~8 g; the old hardcoded 1.0 kg was
+# ~120x too heavy and dominated the (unrealistic) sag/swing dynamics.
+_CABLE_VOLUME        = math.pi * LINK_RADIUS**2 * TOTAL_CABLE_LENGTH
+TOTAL_CABLE_MASS     = float(os.environ.get("CABLE_MASS", DENSITY * _CABLE_VOLUME))
 
 # ---- Translational MSD springs (axial elasticity) ----
 # k_s = EA / L_seg  (axial stiffness).  Set CABLE_AXIAL=0 to lock translations.
 ENABLE_AXIAL_SPRING  = os.environ.get("CABLE_AXIAL", "1") == "1"
-AXIAL_DAMPING_RATIO  = float(os.environ.get("CABLE_AXIAL_ZETA",  0.3))
+AXIAL_DAMPING_RATIO  = float(os.environ.get("CABLE_AXIAL_ZETA",  0.05))
 
 # ---- Legacy mode (v1 hand-tuned parameters for comparison) ----
 LEGACY_MODE          = os.environ.get("CABLE_LEGACY", "0") == "1"
@@ -463,6 +474,8 @@ print(f"  render  dt         : {RENDER_DT*1e3:.3f} ms   ({1.0/RENDER_DT:.1f} Hz)
 print("  ---- Material -----")
 print(f"  Young's modulus E  : {YOUNG_MODULUS/1e6:.3f} MPa")
 print(f"  Poisson ratio  nu   : {POISSON_RATIO}")
+print(f"  density  rho        : {DENSITY:.1f} kg/m^3")
+print(f"  cable mass (rho.V)  : {TOTAL_CABLE_MASS*1000:.2f} g")
 print(f"  Damping ratio  zeta   : {DAMPING_RATIO}")
 print("  ---- Derived ------")
 print(f"  I (area moment)    : {LINK_AREA_MOMENT:.3e} m^4")
@@ -672,7 +685,10 @@ finally:
         "experiment_mode":      EXPERIMENT_MODE,
         "num_links":            NUM_LINKS,
         "total_cable_length_m": TOTAL_CABLE_LENGTH,
+        "total_cable_mass_kg":  TOTAL_CABLE_MASS,
         "young_modulus_pa":     YOUNG_MODULUS,
+        "poisson_ratio":        POISSON_RATIO,
+        "density_kg_m3":        DENSITY,
         "damping_ratio":        DAMPING_RATIO,
         "physics_dt_s":         PHYSICS_DT,
         "render_dt_s":          RENDER_DT,

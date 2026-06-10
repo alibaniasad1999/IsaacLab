@@ -29,7 +29,7 @@ Compare with capsule-chain:
 import argparse
 import os
 import json
-import math
+import time
 from pathlib import Path
 
 from isaaclab.app import AppLauncher
@@ -63,22 +63,27 @@ TOTAL_CABLE_LENGTH = float(os.environ.get("CABLE_LENGTH",     1.0))     # m
 CABLE_RADIUS       = float(os.environ.get("CABLE_RADIUS",     1.5e-3))  # m
 CABLE_DIAMETER     = 2.0 * CABLE_RADIUS
 
-# -- Material: PUR (polyurethane) robot cable --
-YOUNG_MODULUS      = float(os.environ.get("CABLE_E",          30e6))    # Pa
-# NOTE: A near-incompressible Poisson ratio (PUR's true ~0.45) causes severe
+# -- Material: flexible TPU robot cable. Defaults match cable.py (E=40 MPa,
+# rho=1150) so the two methods are directly comparable. --
+YOUNG_MODULUS      = float(os.environ.get("CABLE_E",          40e6))    # Pa
+# NOTE: A near-incompressible Poisson ratio (TPU's true ~0.48) causes severe
 # VOLUMETRIC LOCKING in coarse hex FEM, which artificially stiffens bending.
-# 0.3 keeps the cable visibly floppy; raise it back toward 0.45 only if you
+# 0.3 keeps the cable visibly floppy; raise it back toward 0.48 only if you
 # also raise CABLE_HEX_RES enough to avoid locking.
 POISSON_RATIO      = float(os.environ.get("CABLE_NU",         0.3))
-DENSITY            = float(os.environ.get("CABLE_DENSITY",    1100.0))  # kg/m^3 (PUR)
+DENSITY            = float(os.environ.get("CABLE_DENSITY",    1150.0))  # kg/m^3 (TPU)
 ELASTICITY_DAMPING = float(os.environ.get("CABLE_EDAMP",      0.005))
 DAMPING_SCALE      = float(os.environ.get("CABLE_DSCALE",     1.0))
 
 # -- FEM resolution --
-# Higher resolution = shorter, less-elongated hex elements along the cable =
-# less SHEAR LOCKING = more realistic (floppier) bending. The cost grows with
-# resolution, so this is the main accuracy/speed knob. 10 is far too coarse
-# for a 1 m x 3 mm rod (it makes the cable behave like a stiff bar).
+# WARNING: at the cable's TRUE radius (1.5 mm) the voxel mesher places a
+# single hex element across the cross-section for any affordable resolution
+# (3 elements across a 3 mm rod would need res ~1000 over 1 m). One element
+# across the width cannot represent a bending strain gradient, so this thin
+# FEM rod is INHERENTLY bend-stiff -- it will swing like a bar regardless of
+# E. For a FEM cable that actually drapes, see cable_hanging_compare.py,
+# which simulates a fatter rod with EI- and mass-equivalent scaled material
+# (R_sim = 6 mm, E*(r/R)^4, rho*(r/R)^2, res 250).
 HEX_RESOLUTION     = int(os.environ.get("CABLE_HEX_RES",     24))
 
 # -- Solver --
@@ -105,7 +110,6 @@ SUMMARY_PATH       = OUTPUT_DIR / "summary.json"
 CSV_PATH           = OUTPUT_DIR / "trajectory.csv"
 
 MAX_SIM_TIME       = float(os.environ.get("CABLE_MAX_TIME", 10.0))
-RECORD_VIDEO       = os.environ.get("CABLE_RECORD", "1") == "1"
 
 # -- Stability monitor --
 DIVERGENCE_VEL     = 1.0e4   # m/s -- any vertex above this => unstable
@@ -273,6 +277,7 @@ def run_simulator(sim, cable):
 
     print(f"\nStarting simulation ({EXPERIMENT_MODE}, max {MAX_SIM_TIME}s)...")
     print("=" * 60)
+    wall_t0 = time.perf_counter()
 
     while simulation_app.is_running() and sim_time < MAX_SIM_TIME:
         # -- Apply kick (hanging_kick mode, at t=0) --
@@ -327,12 +332,16 @@ def run_simulator(sim, cable):
 
         # -- Progress --
         if step_count % (render_steps_per_physics * 60) == 0:
+            rtf = sim_time / max(time.perf_counter() - wall_t0, 1e-9)
             print(f"  t={sim_time:.1f}s  max|v|={max_vel_seen:.2e} m/s  "
-                  f"{'STABLE' if stable else 'UNSTABLE'}")
+                  f"{'STABLE' if stable else 'UNSTABLE'}  rtf={rtf:.2f}x")
 
+    wall_elapsed = time.perf_counter() - wall_t0
     csv_file.close()
     print("=" * 60)
     print(f"Simulation complete: {sim_time:.2f}s, {step_count} steps")
+    print(f"  wall clock: {wall_elapsed:.1f} s "
+          f"({sim_time / max(wall_elapsed, 1e-9):.2f}x realtime)")
     print(f"  stable: {stable}")
     print(f"  max |v|: {max_vel_seen:.3e} m/s")
     print(f"  CSV: {CSV_PATH}")
@@ -354,6 +363,8 @@ def run_simulator(sim, cable):
         "physics_dt_s":         PHYSICS_DT,
         "render_dt_s":          RENDER_DT,
         "total_sim_time_s":     sim_time,
+        "wall_clock_s":         wall_elapsed,
+        "realtime_factor":      sim_time / max(wall_elapsed, 1e-9),
         "stable":               stable,
         "instability_at_s":     instability_at_s,
         "max_vertex_vel_m_s":   max_vel_seen,
@@ -400,4 +411,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # simulation_app.close() can hang at 100% CPU on this machine; all
+    # outputs are on disk by now, so force an exit if it doesn't return.
+    import threading
+    threading.Timer(20.0, lambda: os._exit(0)).start()
     simulation_app.close()
+    os._exit(0)

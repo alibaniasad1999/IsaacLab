@@ -191,9 +191,17 @@ MESH_STACKS   = int(os.environ.get("CABLE_MESH_STACK", 80))   # along the length
 PHYSICS_DT = float(os.environ.get("CABLE_PHYSICS_DT", 1.0/240.0))
 RENDER_DT  = float(os.environ.get("CABLE_RENDER_DT",  1.0/60.0))
 
-# ---- Recording / run length ----
-RECORD_VIDEO = os.environ.get("CABLE_RECORD", "1") == "1"
-MAX_SIM_TIME = float(os.environ.get("CABLE_MAX_TIME", 8.0))   # seconds
+# ---- Interactive / recording / run length ----
+# In the GUI we run OPEN-ENDED (no time limit, no recording) so you can grab the
+# orange cube with the mouse: Shift + Left-click-drag it. The cable is attached,
+# so it follows; release and it relaxes back.
+INTERACTIVE  = os.environ.get("CABLE_INTERACTIVE", "0" if HEADLESS else "1") == "1"
+RECORD_VIDEO = (os.environ.get("CABLE_RECORD", "1") == "1") and not INTERACTIVE
+MAX_SIM_TIME = float(os.environ.get("CABLE_MAX_TIME", 8.0))   # seconds (ignored if INTERACTIVE)
+# Grabbable free cube = dynamic + gravity OFF, so it stays put (easy to grab),
+# the attached cable follows it, and it relaxes back on release. (Dynamic bodies
+# transmit motion through the attachment; KINEMATIC ones do NOT -- verified.)
+GRAB_CUBE    = os.environ.get("CABLE_GRAB", "1" if INTERACTIVE else "0") == "1"
 VIDEO_FPS    = 60
 VIDEO_WIDTH  = 1920
 VIDEO_HEIGHT = 1080
@@ -355,16 +363,17 @@ def make_deformable(mesh: UsdGeom.Mesh):
     physicsUtils.add_physics_material_to_prim(stage, mesh.GetPrim(), mat_path)
 
 
-def make_anchor(name: str, x: float, fixed: bool, mass: float):
+def make_anchor(name: str, x: float, fixed: bool, mass: float, grab: bool = False):
     """Rigid cube overlapping a cable end, used as an attachment target.
 
     fixed=True  -> welded to the world (pins that end).
-    fixed=False -> a FREE dynamic cube: gravity acts on it and it drags the
-                   cable end around (a loose connector you can watch move)."""
+    grab=True   -> dynamic + gravity OFF: stays put, Shift+drag it with the mouse
+                   and the attached cable follows; release and it relaxes back.
+    otherwise   -> a FREE dynamic cube: gravity drags it around (it falls/swings)."""
     SIZE = max(4.0 * SIM_RADIUS, 0.04)
     pos  = np.array([x, 0.0, centerline_z(x)])
     path = f"/World/{name}"
-    color = np.array([0.2, 0.4, 0.8]) if fixed else np.array([0.85, 0.5, 0.1])
+    color = np.array([0.2, 0.4, 0.8]) if fixed else np.array([0.95, 0.55, 0.05])
     cube = world.scene.add(DynamicCuboid(
         prim_path=path, name=name, position=pos, size=SIZE,
         mass=mass, color=color))
@@ -374,11 +383,12 @@ def make_anchor(name: str, x: float, fixed: bool, mass: float):
         fj.CreateLocalPos0Attr().Set(Gf.Vec3f(*[float(v) for v in pos]))
         fj.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
     else:
-        # Free cube: add linear/angular drag so the swing decays into a drape
-        # instead of building into an energy-pumping 3D whip.
+        # Dynamic cube: drag so motion settles instead of building a 3D whip.
         rb = PhysxSchema.PhysxRigidBodyAPI.Apply(stage.GetPrimAtPath(path))
         rb.CreateLinearDampingAttr().Set(END_CUBE_DAMP)
         rb.CreateAngularDampingAttr().Set(END_CUBE_DAMP)
+        if grab:
+            rb.CreateDisableGravityAttr().Set(True)   # stays put, grabbable
     return path, cube
 
 
@@ -434,8 +444,10 @@ print(f"  EI (flexural rig.) : real {EI_REAL:.3e}  /  sim {EI_SIM:.3e} N.m^2 "
 print("  ---- Ends ----")
 print(f"  left end           : {'FIXED (welded)' if LEFT_FIXED else 'FREE cube'}")
 if ENDS == "both":
-    print(f"  right end          : {'FIXED (welded)' if RIGHT_FIXED else 'FREE cube'}"
-          f"  (free cube mass {END_CUBE_MASS*1000:.0f} g)")
+    _rl = ("FIXED (welded)" if RIGHT_FIXED
+           else "GRABBABLE (dynamic, gravity off -- Shift+drag)" if GRAB_CUBE
+           else "FREE cube (falls)")
+    print(f"  right end          : {_rl}  (cube {END_CUBE_MASS*1000:.0f} g)")
 if USE_OBSTACLE:
     print("  ---- Obstacle ----")
     print(f"  bar radius         : {OB_RADIUS*1000:.0f} mm")
@@ -462,7 +474,8 @@ if not LEFT_FIXED:
 if ENDS == "both":
     a1, c1 = make_anchor("anchor_right", TOTAL_CABLE_LENGTH,
                          fixed=RIGHT_FIXED,
-                         mass=0.01 if RIGHT_FIXED else END_CUBE_MASS)
+                         mass=0.01 if RIGHT_FIXED else END_CUBE_MASS,
+                         grab=GRAB_CUBE and not RIGHT_FIXED)
     attach_cable(MESH_PATH, a1, "attach_right")
     if not RIGHT_FIXED:
         free_cubes.append(("right", c1))
@@ -482,14 +495,15 @@ print("Scene built.\n")
 # 6. CAMERA / RECORDING SETUP
 # ===============================================================
 rgb_annotator = None
-if RECORD_VIDEO and not HEADLESS:
-    print("Setting up viewport camera + recording...")
+if not HEADLESS:
     try:
         from isaacsim.core.utils.viewports import set_camera_view
     except ImportError:
         from omni.isaac.core.utils.viewports import set_camera_view
     set_camera_view(eye=np.array([2.2, 2.2, 1.7]),
                     target=np.array([TOTAL_CABLE_LENGTH / 2.0, 0.0, ANCHOR_Z - 0.4]))
+if RECORD_VIDEO and not HEADLESS:
+    print("Setting up recording...")
     render_product = rep.create.render_product("/OmniverseKit_Persp",
                                                 (VIDEO_WIDTH, VIDEO_HEIGHT))
     rgb_annotator = rep.AnnotatorRegistry.get_annotator("rgb")
@@ -565,11 +579,20 @@ contact_seen   = False
 key_frame_steps = [int(t / RENDER_DT) for t in KEY_FRAME_TIMES]
 total_steps     = int(MAX_SIM_TIME / RENDER_DT)
 
-print(f"\nSimulating up to t = {MAX_SIM_TIME}s ({total_steps} render steps)...\n")
+if INTERACTIVE:
+    print("\n" + "=" * 70)
+    print("INTERACTIVE -- window stays open. MOVE the cable end:")
+    print("  Shift + Left-click-drag the ORANGE cube -> the cable follows it.")
+    print("  Release -> it relaxes back.  (FEM cable: expect soft/jelly behaviour")
+    print("  and more sag than the Warp rod -- that's the model's nature.)")
+    print("  Close the window to quit.")
+    print("=" * 70 + "\n")
+else:
+    print(f"\nSimulating up to t = {MAX_SIM_TIME}s ({total_steps} render steps)...\n")
 wall_t0 = time.perf_counter()
 
 try:
-    while simulation_app.is_running() and step_count < total_steps:
+    while simulation_app.is_running() and (INTERACTIVE or step_count < total_steps):
         world.step(render=(rgb_annotator is not None) or (not HEADLESS))
         step_count += 1
         sim_time = step_count * RENDER_DT

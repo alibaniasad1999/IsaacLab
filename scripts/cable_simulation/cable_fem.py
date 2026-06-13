@@ -90,14 +90,20 @@ from pxr import UsdGeom, UsdPhysics, Gf, Sdf, PhysxSchema, Usd
 from omni.physx.scripts import deformableUtils, physicsUtils
 import omni.replicator.core as rep
 
+# Shared physical-cable parameters (length, real radius, E, nu, density) live in
+# cable_config.py so all three cable scripts model the SAME physical cable. The
+# FEM-specific fattening (SIM_RADIUS) and rescaling are still done below.
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from cable_config import (TOTAL_CABLE_LENGTH, REAL_RADIUS, YOUNG_MODULUS,
+                          POISSON_RATIO, DENSITY)
+
 
 # ===============================================================
 # 1. CONFIGURATION  (env vars override defaults)
 # ===============================================================
 
-# ---- Real cable geometry (the physical target) ----
-TOTAL_CABLE_LENGTH = float(os.environ.get("CABLE_LENGTH",  1.0))     # m
-REAL_RADIUS        = float(os.environ.get("CABLE_RADIUS",  1.5e-4))  # real target radius (m)
+# ---- Real cable geometry (the physical target -- from cable_config) ----
 # NOTE: REAL_RADIUS is ONLY the scaling reference -- it does NOT set the visible
 # thickness (that's SIM_RADIUS). For very small REAL_RADIUS the (r/R)^3 / (r/R)^2
 # rescaling below would drive E_SIM and DENSITY_SIM toward zero (a degenerate,
@@ -121,10 +127,7 @@ if SIM_RADIUS < 13e-3:
           f"(~15 mm): the sim mesh will truncate or cooking will fail. Use cable.py "
           f"for a genuinely thin cable.")
 
-# ---- Material (cable.py settings: flexible TPU) ----
-YOUNG_MODULUS = float(os.environ.get("CABLE_E",       40e6))    # Pa (TPU ~40 MPa)  [cable.py]
-POISSON_RATIO = float(os.environ.get("CABLE_NU",      0.48))    # near-incompressible  [cable.py]
-DENSITY       = float(os.environ.get("CABLE_DENSITY", 1150.0))  # kg/m^3 (TPU)        [cable.py]
+# ---- Material (flexible TPU -- E/nu/density from cable_config) ----
 FRICTION      = float(os.environ.get("CABLE_FRICTION", 0.4))    # dynamic friction on the bar
 
 # ---- Scene geometry ----

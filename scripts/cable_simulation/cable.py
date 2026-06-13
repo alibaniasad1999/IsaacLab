@@ -58,34 +58,32 @@ from isaacsim.core.prims import RigidPrim as RigidPrimView
 from pxr import UsdPhysics, Gf, Sdf, PhysxSchema
 import omni.replicator.core as rep
 
+# Shared physical-cable parameters (length, radius, E, nu, density, mass) live in
+# cable_config.py so all three cable scripts model the SAME physical cable.
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from cable_config import (TOTAL_CABLE_LENGTH, REAL_RADIUS, YOUNG_MODULUS,
+                          POISSON_RATIO, DENSITY, CABLE_MASS)
+
 
 # ===============================================================
 # 1. CONFIGURATION  (env vars override defaults -- used by sweep)
 # ===============================================================
 
-# ---- Cable geometry ----
-NUM_LINKS            = int(  os.environ.get("CABLE_NUM_LINKS",   200))
-TOTAL_CABLE_LENGTH   = float(os.environ.get("CABLE_LENGTH",      1.0))
-LINK_RADIUS          = float(os.environ.get("CABLE_RADIUS",      1.5e-3))  # 1.5 mm
+# ---- Cable geometry ----  (length/radius/material come from cable_config)
+NUM_LINKS            = int(os.environ.get("CABLE_NUM_LINKS", 200))
+LINK_RADIUS          = REAL_RADIUS   # capsule chain simulates the real 1.5 mm radius
 
 ANCHOR_Z             = 2.0   # height of top anchor above ground
 
-# ---- Material properties (default: flexible TPU / polyurethane robot cable) ----
-# Flexible thermoplastic polyurethane cable jacket (Shore ~85-95A):
-#   E ~ 30-50 MPa, nu ~ 0.48 (near-incompressible elastomer), rho ~ 1150 kg/m^3.
-YOUNG_MODULUS        = float(os.environ.get("CABLE_E",           40e6))     # Pa  (flexible TPU ~ 40 MPa)
-POISSON_RATIO        = float(os.environ.get("CABLE_NU",          0.48))     # near-incompressible elastomer
-DENSITY              = float(os.environ.get("CABLE_DENSITY",     1150.0))   # kg/m^3 (TPU)
+# ---- Material properties (flexible TPU -- from cable_config) ----
 # Structural damping ratio. Flexible TPU is LIGHTLY damped (loss factor
 # tan(delta) ~ 0.05-0.1), so the realistic critical-damping fraction is small.
 # (The old value 0.2 made the cable swing as if through honey.)
 DAMPING_RATIO        = float(os.environ.get("CABLE_ZETA",        0.05))     # fraction of critical damping
 
-# ---- Cable mass: derived from density x volume (NOT hardcoded) ----
-# A 1 m x 3 mm PUR cable physically weighs ~8 g; the old hardcoded 1.0 kg was
-# ~120x too heavy and dominated the (unrealistic) sag/swing dynamics.
-_CABLE_VOLUME        = math.pi * LINK_RADIUS**2 * TOTAL_CABLE_LENGTH
-TOTAL_CABLE_MASS     = float(os.environ.get("CABLE_MASS", DENSITY * _CABLE_VOLUME))
+# ---- Cable mass: derived from density x volume in cable_config (NOT hardcoded) ----
+TOTAL_CABLE_MASS     = CABLE_MASS
 
 # ---- Translational MSD springs (axial elasticity) ----
 # k_s = EA / L_seg  (axial stiffness).  Set CABLE_AXIAL=1 to enable.

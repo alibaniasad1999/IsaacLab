@@ -38,11 +38,18 @@ from isaacsim.simulation_app import SimulationApp
 HEADLESS = os.environ.get("CABLE_HEADLESS", "0") == "1"
 simulation_app = SimulationApp({"headless": HEADLESS})
 
+import sys
 import numpy as np
 import warp as wp
 from isaacsim.core.api.world import World
 from isaacsim.core.api.objects import DynamicCuboid
 from pxr import UsdGeom, UsdPhysics, Gf, Sdf, PhysxSchema, UsdShade
+
+# Shared physical-cable parameters (length, mass) live in cable_config.py so all
+# three cable scripts model the SAME physical cable. The rod keeps its own visual
+# radius (a 1-D rod has no FEM fattening limit) and node count.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from cable_config import TOTAL_CABLE_LENGTH, CABLE_MASS
 
 wp.init()
 DEVICE = "cuda:0" if wp.is_cuda_available() else "cpu"
@@ -52,9 +59,9 @@ DEVICE = "cuda:0" if wp.is_cuda_available() else "cpu"
 # 1. CONFIG
 # ===============================================================
 N            = int(os.environ.get("ROD_NODES", 48))          # rod nodes
-LENGTH       = float(os.environ.get("ROD_LENGTH", 1.0))      # rest length (m), inextensible
+LENGTH       = TOTAL_CABLE_LENGTH                             # rest length (m), inextensible
 VIS_RADIUS   = float(os.environ.get("ROD_RADIUS", 5e-3))     # visual + collision radius (m)
-TOTAL_MASS   = float(os.environ.get("ROD_MASS", 0.05))       # kg (cable mass)
+TOTAL_MASS   = CABLE_MASS                                     # kg (physical cable mass)
 BEND_COMP    = float(os.environ.get("ROD_BEND_COMP", 1.0e-3))  # bending compliance (small=stiff)
 STRETCH_COMP = float(os.environ.get("ROD_STRETCH_COMP", 1.0e-9))  # ~0 => inextensible
 SUBSTEPS     = int(os.environ.get("ROD_SUBSTEPS", 16))

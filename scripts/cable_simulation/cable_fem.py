@@ -223,7 +223,9 @@ OB_DAMP    = float(os.environ.get("CABLE_OB_DAMP", 8.0))    # low -> stays dragg
 # Collision cushion on the bar so a SOFT cable rests on it without tunnelling
 # through (see make_obstacle). 0 = PhysX default (fine for a firm cable).
 OB_CONTACT_OFFSET = float(os.environ.get("CABLE_OB_CONTACT_OFFSET", 0.0))
-OB_REST_OFFSET    = float(os.environ.get("CABLE_OB_REST_OFFSET", 0.005))
+# Rest offset = the standoff held at equilibrium = the VISIBLE gap between cable
+# and bar. Keep it tiny (1 mm) so the cable sits ON the bar, not hovering above it.
+OB_REST_OFFSET    = float(os.environ.get("CABLE_OB_REST_OFFSET", 0.001))
 
 # ---- Code-driven bar motion (a deterministic alternative to mouse-dragging) ----
 # Set CABLE_OB_MOVE_SPEED!=0 to have the SCRIPT drive the bar at a constant speed
@@ -279,6 +281,13 @@ VERTEX_DAMPING  = float(os.environ.get("CABLE_VTX_DAMP", 0.5 if FAITHFUL else 0.
 # Material elasticity damping (Rayleigh-style internal damping): further kills the
 # volumetric jelly without changing EI. Only in faithful mode by default.
 ELAST_DAMPING   = float(os.environ.get("CABLE_ELAST_DAMP", 0.3 if FAITHFUL else 0.0))
+# The DEFORMABLE's own collision offsets (the gap you SEE between cable and bar):
+#   contact offset = how far out contact forces start (the anti-tunnel cushion)
+#   rest offset    = the standoff held at rest = the VISIBLE gap
+# A big contact + tiny rest = caught early but sits ON the surface (no float gap).
+# 0 = leave PhysX's (large) auto default, which makes the cable hover ~1 cm off.
+DEF_CONTACT_OFFSET = float(os.environ.get("CABLE_DEF_CONTACT_OFFSET", 0.0))
+DEF_REST_OFFSET    = float(os.environ.get("CABLE_DEF_REST_OFFSET", 0.0005))
 
 # ---- Visual cable mesh tessellation (cosmetic; sim mesh is the voxel tets) ----
 MESH_SEGMENTS = int(os.environ.get("CABLE_MESH_SEG",   16))   # around circumference
@@ -457,6 +466,13 @@ def make_deformable(mesh: UsdGeom.Mesh):
     if not ok:
         raise RuntimeError("add_physx_deformable_body failed (cooking error -- "
                            "try a lower CABLE_FEM_RES or a fatter CABLE_SIM_RADIUS)")
+
+    # Tighten the deformable's collision offsets so the cable sits ON contacts
+    # instead of hovering ~1 cm above them (PhysX's auto default is large).
+    if DEF_CONTACT_OFFSET > 0:
+        dcol = PhysxSchema.PhysxCollisionAPI.Apply(mesh.GetPrim())
+        dcol.CreateContactOffsetAttr().Set(DEF_CONTACT_OFFSET)
+        dcol.CreateRestOffsetAttr().Set(DEF_REST_OFFSET)
 
     mat_path = "/World/FemCable/material"
     deformableUtils.add_deformable_body_material(

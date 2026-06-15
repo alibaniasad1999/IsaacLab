@@ -37,8 +37,16 @@ from pathlib import Path
 # as cable_fem_base.py -- then add the cylinder back on top of it.
 os.environ["CABLE_FAITHFUL"] = "1"
 os.environ.setdefault("CABLE_OBSTACLE", "1")             # bring the cylinder back
-os.environ.setdefault("CABLE_OB_MOVE_SPEED", "0")        # stationary + mouse-draggable
-os.environ.setdefault("CABLE_OB_CONTACT_OFFSET", "0.02")  # cushion: soft cable won't tunnel
+# Stationary bar (mouse-draggable). NOTE: a fast move speed like -0.5 makes the
+# bar PLUMMET away from the cable and opens a big gap -- use a small value such as
+# -0.05 if you want it to lower slowly while staying near the cable.
+os.environ.setdefault("CABLE_OB_MOVE_SPEED", "0")
+# Close the cable<->bar gap. PhysX's default collision offset on a soft body is
+# large (~1 cm), so the cable HOVERS above the bar. We set the DEFORMABLE's own
+# offsets: a 1 cm contact offset (catches the soft cable so it can't tunnel) with
+# a 5 mm rest offset (tuned so it settles EXACTLY on the bar surface -- 0 mm gap).
+os.environ.setdefault("CABLE_DEF_CONTACT_OFFSET", "0.01")
+os.environ.setdefault("CABLE_DEF_REST_OFFSET", "0.005")
 os.environ.setdefault("CABLE_POS_ITERS", "120")          # enough iters for clean soft contact
 # Separate output folder so it doesn't clobber the faithful base's results.
 os.environ.setdefault("CABLE_OUTPUT_DIR",

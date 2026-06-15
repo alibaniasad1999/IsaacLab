@@ -220,6 +220,10 @@ OB_MOVABLE = os.environ.get("CABLE_OB_MOVABLE",
 # raise OB_DAMP if it ever drifts.
 OB_MASS    = float(os.environ.get("CABLE_OB_MASS", 100.0))  # kg; cable can't move it
 OB_DAMP    = float(os.environ.get("CABLE_OB_DAMP", 8.0))    # low -> stays draggable
+# Collision cushion on the bar so a SOFT cable rests on it without tunnelling
+# through (see make_obstacle). 0 = PhysX default (fine for a firm cable).
+OB_CONTACT_OFFSET = float(os.environ.get("CABLE_OB_CONTACT_OFFSET", 0.0))
+OB_REST_OFFSET    = float(os.environ.get("CABLE_OB_REST_OFFSET", 0.005))
 
 # ---- Code-driven bar motion (a deterministic alternative to mouse-dragging) ----
 # Set CABLE_OB_MOVE_SPEED!=0 to have the SCRIPT drive the bar at a constant speed
@@ -528,7 +532,15 @@ def make_obstacle():
         Gf.Vec3d(OB_X, OB_Y, OB_CENTER_Z))
     prim = cyl.GetPrim()
     UsdPhysics.CollisionAPI.Apply(prim)
-    PhysxSchema.PhysxCollisionAPI.Apply(prim)
+    col = PhysxSchema.PhysxCollisionAPI.Apply(prim)
+    # Contact offset = a collision "cushion": PhysX starts generating contacts when
+    # the cable is still OB_CONTACT_OFFSET away from the bar, so a SOFT cable gets
+    # caught before it can sink/tunnel through the thin bar. Rest offset keeps a
+    # small standoff at equilibrium. This is what lets a floppy (cable-like) rod
+    # rest on the bar without the firm-rod hack. 0 = leave PhysX defaults.
+    if OB_CONTACT_OFFSET > 0:
+        col.CreateContactOffsetAttr().Set(OB_CONTACT_OFFSET)
+        col.CreateRestOffsetAttr().Set(OB_REST_OFFSET)
     if OB_CODE_DRIVEN:
         # Kinematic: the loop sets its pose exactly each step. Infinitely "heavy"
         # to the cable (can't be pushed) and never drifts -- ideal for a clean test.

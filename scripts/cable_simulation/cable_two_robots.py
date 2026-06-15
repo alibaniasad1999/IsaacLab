@@ -1,10 +1,18 @@
 """
 Two Franka robots connected by a flexible cable -- method comparison test.
 
-Two Franka Panda arms face each other and hold the two ends of a 0.6 m
-flexible cable. After a short settle, the LEADER arm swings its base joint
-(panda_joint1) sinusoidally while the FOLLOWER holds its pose, so the cable
-is dragged side to side. The SAME experiment runs with ALL THREE cable models:
+Two Franka Panda arms face each other and hold the two ends of a 0.6 m flexible
+cable (spaced so the cable REACHES both grippers and stays attached). After a
+short settle, the LEADER arm oscillates its shoulder (panda_joint2) to PULL the
+cable along its axis, while the FOLLOWER is left COMPLIANT (soft PD) -- so the
+cable's tension DRAGS the follower (~4 cm for a 30 cm leader pull) and you see the
+motion transmitted through it. (Pulling along the cable transmits; a sideways
+swing would just bend it. Set CABLE_TRAJ_JOINT=panda_joint1 / CABLE_FOLLOWER_SOFT=0
+for the old hold-rigid behaviour.)
+
+How well it transmits is itself a result: the inextensible CAPSULE chain drags the
+follower most, the soft FEM cable a bit less (it stretches), and WARP not at all
+(its rod exerts no force on the arms -- one-way coupling). Runs with all three:
 
   CABLE_METHOD=capsule      rigid capsule chain + D6 joints      (cable.py)
   CABLE_METHOD=deformable   FEM deformable cylinder, fattened    (cable_fem.py)
@@ -108,10 +116,10 @@ HEX_RESOLUTION     = int(os.environ.get(
     min(max(int(math.ceil(3.0 * CABLE_LENGTH / (2.0 * FEM_SIM_RADIUS))), 16), 130)))
 FEM_SOLVER_ITERS   = int(os.environ.get("CABLE_SOLVER_ITERS", 60))
 VERTEX_DAMPING     = float(os.environ.get("CABLE_VDAMP",     0.05))
-# Smaller grab region = more PIN-like (the cable can droop right at the gripper)
-# instead of CLAMP-like (a big rigid grabbed chunk that leaves the hand straight
-# then curves -- the "rigid at the base" look). 0.025 droops naturally yet holds.
-ATTACH_OVERLAP     = float(os.environ.get("CABLE_ATTACH_OVERLAP", 0.025))  # grab radius near hand
+# Grab radius for the FEM auto-attachment near each hand. Too small and it grabs
+# no vertices -> the cable falls off the robot. 0.04 holds reliably (a smaller,
+# more pin-like 0.025 looked nicer at the base but risked detaching).
+ATTACH_OVERLAP     = float(os.environ.get("CABLE_ATTACH_OVERLAP", 0.04))  # grab radius near hand
 # The FEM rod is simulated FAT but rendered THIN so it LOOKS like the capsule/warp
 # cables (same trick as cable_fem.py): hide the fat sim mesh and draw a thin tube
 # along its deformed centreline. Set CABLE_THIN_VISUAL=0 to see the true fat rod.
@@ -120,9 +128,19 @@ VIS_RADIUS         = float(os.environ.get("CABLE_VIS_RADIUS", CABLE_RADIUS))  # 
 THIN_NODES         = int(os.environ.get("CABLE_VIS_NODES", 40))   # centreline samples
 
 # -- Robot / trajectory --
-TRAJ_AMPLITUDE_RAD = float(os.environ.get("CABLE_TRAJ_AMP",  0.3))   # joint1 swing
-TRAJ_FREQUENCY_HZ  = float(os.environ.get("CABLE_TRAJ_FREQ", 0.5))
+# Bigger + faster leader pull so the cable visibly drags the follower (~6 cm at
+# capsule). Push further (amp 0.7, freq 1.0) for more drag, but the cable starts
+# to whip; 0.5/0.8 is the clear-but-stable sweet spot.
+TRAJ_AMPLITUDE_RAD = float(os.environ.get("CABLE_TRAJ_AMP",  0.5))   # shoulder swing (rad)
+TRAJ_FREQUENCY_HZ  = float(os.environ.get("CABLE_TRAJ_FREQ", 0.8))   # Hz
 SETTLE_SECONDS     = float(os.environ.get("CABLE_SETTLE",    1.0))
+# Make the FOLLOWER arm COMPLIANT (soft PD) so the cable's tension can DRAG it when
+# the leader moves -- this is what shows force/motion transmission through the cable.
+# (Default ON; warp can't do this -- its rod exerts no force on the arms.) Set
+# CABLE_FOLLOWER_SOFT=0 to make the follower hold rigid like before.
+FOLLOWER_SOFT      = os.environ.get("CABLE_FOLLOWER_SOFT", "1") == "1"
+FOLLOWER_STIFFNESS = float(os.environ.get("CABLE_FOLLOWER_STIFFNESS", 15.0))  # low=easier to drag
+FOLLOWER_DAMPING   = float(os.environ.get("CABLE_FOLLOWER_DAMPING",   5.0))
 
 # Franka panda_hand world pose at the FRANKA_PANDA_HIGH_PD_CFG default init
 # configuration with the base at the origin (measured once via sim.reset():
@@ -169,11 +187,18 @@ JOINT_STIFFNESS  = K_BEND_RAD * math.pi / 180.0           # N.m/deg
 LINK_ROT_INERTIA = (1.0/3.0) * LINK_MASS * SEGMENT_SPACING**2
 C_CRIT_RAD       = 2.0 * math.sqrt(max(K_BEND_RAD * LINK_ROT_INERTIA, 1e-30))
 JOINT_DAMPING    = DAMPING_RATIO * C_CRIT_RAD * math.pi / 180.0   # N.m.s/deg
+# Damping-only drive on the free twist DOF (rotX) -- bleeds the spurious spin that
+# otherwise made the chain look unstable (0.02 = ~11x calmer than undamped).
+TWIST_DAMPING    = float(os.environ.get("CABLE_TWIST_DAMP", 0.02))
 
-# Robot base placement: hands face each other along x, TCPs CABLE_LENGTH
-# apart. Leader base at -BASE_X (yaw 0), follower at +BASE_X (yaw 180 deg).
+# Robot base placement: hands face each other along x, TCPs ~CABLE_LENGTH apart so
+# the cable actually REACHES both grippers (so it stays attached). GRIP_FACTOR>1
+# spreads the bases farther, but then the cable can't reach -> FEM detaches and the
+# capsule chain snaps taut/unstable, so keep it at 1.0 (transmission is via the
+# axial pull below, not by over-stretching the cable).
+GRIP_FACTOR = float(os.environ.get("CABLE_GRIP_FACTOR", 1.0))   # 1.0=reaches grippers
 TCP_LOCAL = HAND_LOCAL_POS + np.array([0.0, 0.0, -HAND_TCP_DROP])  # in base frame
-BASE_X    = CABLE_LENGTH / 2.0 + TCP_LOCAL[0]
+BASE_X    = GRIP_FACTOR * CABLE_LENGTH / 2.0 + TCP_LOCAL[0]
 ANCHOR_LEAD = np.array([-CABLE_LENGTH / 2.0,  TCP_LOCAL[1], TCP_LOCAL[2]])
 ANCHOR_FOLW = np.array([+CABLE_LENGTH / 2.0, -TCP_LOCAL[1], TCP_LOCAL[2]])
 CABLE_MID   = 0.5 * (ANCHOR_LEAD + ANCHOR_FOLW)
@@ -255,6 +280,14 @@ def build_capsule_cable(stage):
             drive.CreateStiffnessAttr().Set(JOINT_STIFFNESS)
             drive.CreateDampingAttr().Set(JOINT_DAMPING)
             drive.CreateMaxForceAttr().Set(1e6)
+        # Twist (rotX) is free and has ~zero inertia, so any torque spins it up to
+        # huge angular velocity (looked "unstable"). A damping-only drive bleeds it
+        # (a zero-inertia noise sink) without resisting bending. (project note)
+        twist = UsdPhysics.DriveAPI.Apply(prim, "rotX")
+        twist.CreateTypeAttr().Set("force")
+        twist.CreateStiffnessAttr().Set(0.0)
+        twist.CreateDampingAttr().Set(TWIST_DAMPING)
+        twist.CreateMaxForceAttr().Set(1e6)
 
     # End joints: ball joint (translations locked, rotations free) between
     # each hand TCP and the matching cable end. Rotations are left free so
@@ -611,7 +644,12 @@ def main():
     follower.update(PHYSICS_DT)
 
     hand_idx = leader.body_names.index("panda_hand")
-    j1_idx   = leader.joint_names.index("panda_joint1")
+    # Which joint the leader oscillates. joint2 (shoulder) moves the gripper
+    # toward/away -> PULLS the cable axially -> drags the compliant follower
+    # (best transmission). joint1 (yaw) only swings it sideways -> the flexible
+    # cable mostly just bends. Default joint2 for the "drag the other arm" demo.
+    TRAJ_JOINT = os.environ.get("CABLE_TRAJ_JOINT", "panda_joint2")
+    j1_idx   = leader.joint_names.index(TRAJ_JOINT)
 
     def tcp_of(robot):
         hp = robot.data.body_pos_w[0, hand_idx].cpu().numpy()
@@ -664,6 +702,23 @@ def main():
     follower_targets = follower.data.joint_pos.clone()
     q1_default       = float(leader_targets[0, j1_idx].item())
     print(f"  hold target captured (leader hand z should stay ~{tcp_of(leader)[2]:.2f} m)")
+
+    # Soften the FOLLOWER's arm joints so the cable can DRAG it (force transmission).
+    # warp exerts no force on the arms, so leave it stiff there.
+    if FOLLOWER_SOFT and CABLE_METHOD != "warp":
+        arm_ids = [follower.joint_names.index(f"panda_joint{i}") for i in range(1, 8)]
+        st = follower.data.joint_stiffness.clone()
+        dm = follower.data.joint_damping.clone()
+        for j in arm_ids:
+            st[:, j] = FOLLOWER_STIFFNESS
+            dm[:, j] = FOLLOWER_DAMPING
+        follower.write_joint_stiffness_to_sim(st)
+        follower.write_joint_damping_to_sim(dm)
+        print(f"  FOLLOWER is COMPLIANT (arm stiffness {FOLLOWER_STIFFNESS}) -- the cable "
+              f"drags it when the leader moves (CABLE_FOLLOWER_SOFT=0 to hold rigid)")
+    elif CABLE_METHOD == "warp":
+        print("  NOTE: warp rod exerts no force on the arms, so the follower won't be "
+              "dragged (one-way coupling). Use capsule/deformable to see transmission.")
 
     # CSV
     csv_file = open(CSV_PATH, "w", newline="")

@@ -1,0 +1,23 @@
+{
+  "method": "deformable",
+  "test": "two_robots",
+  "cable_length_m": 0.6,
+  "cable_radius_m": 0.0015,
+  "cable_mass_kg": 0.004877322594698154,
+  "young_modulus_pa": 40000000.0,
+  "density_kg_m3": 1150.0,
+  "num_links": null,
+  "hex_resolution": 75,
+  "rod_nodes": null,
+  "traj_amplitude_rad": 0.5,
+  "traj_frequency_hz": 0.8,
+  "settle_seconds": 1.0,
+  "physics_dt_s": 0.004166666666666667,
+  "total_sim_time_s": 10.00416666666642,
+  "wall_clock_s": 161.556501915009,
+  "realtime_factor": 0.06192364001499223,
+  "stable": true,
+  "instability_at_s": null,
+  "max_speed_metric": 2.125743865966797,
+  "csv_path": "/home/ali/Documents/me/IsaacLab/scripts/cable_simulation/slides_output/approach3_robot/trajectory.csv"
+}

@@ -84,6 +84,23 @@ VIS_SEG    = 10   # tube cross-section segments
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Video recording (GUI render mode). CABLE_RECORD=1 -> record a finite MAX_TIME
+# clip with the handle scripted on a sweep (so the cable visibly deforms), written
+# to CABLE_OUTPUT_DIR/cable_warp.mp4.
+import subprocess
+RECORD     = os.environ.get("CABLE_RECORD", "0") == "1" and not HEADLESS
+OUTPUT_DIR = os.environ.get("CABLE_OUTPUT_DIR", os.path.join(SCRIPT_DIR, "cable_output", "warp"))
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+VIDEO_PATH = os.path.join(OUTPUT_DIR, "cable_warp.mp4")
+
+
+def _warp_ffmpeg(w, h):
+    cmd = ["ffmpeg", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}",
+           "-framerate", "60", "-i", "-", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+           "-crf", "20", VIDEO_PATH]
+    return subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
 
 # ===============================================================
 # 2. WARP XPBD ROD KERNELS
@@ -298,7 +315,8 @@ if not HEADLESS:
     set_camera_view(eye=np.array([1.6, 1.8, 2.0]), target=np.array([0.0, 0.0, 1.2]))
 
 rgb_annotator = None
-if not HEADLESS and os.environ.get("CABLE_SHOT", "0") == "1":
+ffmpeg_proc = None
+if not HEADLESS and (RECORD or os.environ.get("CABLE_SHOT", "0") == "1"):
     import omni.replicator.core as rep
     rp = rep.create.render_product("/OmniverseKit_Persp", (1280, 720))
     rgb_annotator = rep.AnnotatorRegistry.get_annotator("rgb")
@@ -327,9 +345,10 @@ total = int(MAX_TIME / RENDER_DT)
 import time as _t
 t0 = _t.perf_counter()
 try:
-    while simulation_app.is_running() and ((not HEADLESS) or step < total):
-        # self-test: script the handle on a circle so we can validate headless
-        if SELFTEST:
+    # When recording (or self-testing) run a FINITE clip and SCRIPT the handle so
+    # the cable visibly deforms; otherwise (interactive GUI) loop until the user quits.
+    while simulation_app.is_running() and ((not HEADLESS and not RECORD) or step < total):
+        if SELFTEST or RECORD:
             ang = 0.6 * math.sin(2.0 * math.pi * 0.25 * step * RENDER_DT)
             hp = np.array([0.4 + 0.3 * math.sin(ang), 0.3 * math.sin(2 * ang),
                            1.5 - 0.4 * abs(math.sin(ang))])
@@ -343,17 +362,13 @@ try:
         world.step(render=(not HEADLESS))
         step += 1
 
-        if rgb_annotator is not None and step == 180:
-            try:
-                import cv2
-                d = rgb_annotator.get_data()
-                if d is not None and d.size > 0:
-                    cv2.imwrite("/tmp/warp_rod_shot.png",
-                                cv2.cvtColor(np.ascontiguousarray(d[:, :, :3], dtype=np.uint8),
-                                             cv2.COLOR_RGB2BGR))
-                    print("saved /tmp/warp_rod_shot.png")
-            except Exception as _e:
-                print("shot failed:", _e)
+        if rgb_annotator is not None and RECORD:
+            d = rgb_annotator.get_data()
+            if d is not None and getattr(d, "size", 0) > 0:
+                rgb = np.ascontiguousarray(d[:, :, :3], dtype=np.uint8)
+                if ffmpeg_proc is None:
+                    ffmpeg_proc = _warp_ffmpeg(rgb.shape[1], rgb.shape[0])
+                ffmpeg_proc.stdin.write(rgb.tobytes())
 
         if step % 60 == 0:
             seglen = np.linalg.norm(np.diff(P, axis=0), axis=1).sum()
@@ -364,5 +379,9 @@ try:
 except KeyboardInterrupt:
     print("\nInterrupted.")
 finally:
+    if ffmpeg_proc is not None:
+        ffmpeg_proc.stdin.close()
+        ffmpeg_proc.wait()
+        print(f"Video saved: {VIDEO_PATH}")
     print("Done.")
     simulation_app.close()

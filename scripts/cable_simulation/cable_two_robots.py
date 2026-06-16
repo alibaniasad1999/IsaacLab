@@ -62,12 +62,21 @@ simulation_app = app_launcher.app
 # -- Imports after SimulationApp --
 import numpy as np
 import torch
+import subprocess
 
 import omni.usd
 import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation, DeformableObject, DeformableObjectCfg
 from isaaclab.sim import SimulationContext
 from isaaclab_assets.robots.franka import FRANKA_PANDA_HIGH_PD_CFG
+try:
+    import omni.replicator.core as rep      # for video capture (GUI only)
+except Exception:
+    rep = None
+
+# Record an .mp4 of the run (GUI/render mode only). CABLE_RECORD=1 + not headless.
+RECORD_VIDEO = (os.environ.get("CABLE_RECORD", "0") == "1") and not HEADLESS
+VIDEO_FPS, VIDEO_W, VIDEO_H = 60, 1280, 720   # 60 = real-time (grabs every render frame)
 
 from isaacsim.core.prims import RigidPrim as RigidPrimView
 from pxr import UsdPhysics, PhysxSchema, Gf, Sdf, UsdGeom
@@ -169,6 +178,15 @@ OUTPUT_DIR  = Path(os.environ.get(
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 CSV_PATH     = OUTPUT_DIR / "trajectory.csv"
 SUMMARY_PATH = OUTPUT_DIR / "summary.json"
+VIDEO_PATH   = OUTPUT_DIR / "video.mp4"
+
+
+def _start_ffmpeg(w, h):
+    cmd = ["ffmpeg", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
+           "-s", f"{w}x{h}", "-framerate", str(VIDEO_FPS), "-i", "-",
+           "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", str(VIDEO_PATH)]
+    return subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # ===============================================================
@@ -731,6 +749,16 @@ def main():
     sim_time, step_count = 0.0, 0
     stable, instability_at, max_speed = True, None, 0.0
 
+    # Video capture (GUI render mode): grab the viewport RGB each render frame.
+    rgb_annotator, ffmpeg_proc = None, None
+    if RECORD_VIDEO and rep is not None:
+        rp = rep.create.render_product("/OmniverseKit_Persp", (VIDEO_W, VIDEO_H))
+        rgb_annotator = rep.AnnotatorRegistry.get_annotator("rgb")
+        rgb_annotator.attach([rp])
+        for _ in range(10):           # warm up the renderer
+            sim.render()
+        print(f"  recording video -> {VIDEO_PATH}")
+
     print(f"\nSimulating up to t = {MAX_SIM_TIME}s ...")
     wall_t0 = time.perf_counter()
 
@@ -800,6 +828,15 @@ def main():
                 f"{mid[0]:.6f},{mid[1]:.6f},{mid[2]:.6f},"
                 f"{span:.6f},{sag:.6f}\n")
 
+            # -- Video frame --
+            if rgb_annotator is not None:
+                data = rgb_annotator.get_data()
+                if data is not None and getattr(data, "size", 0) > 0:
+                    rgb = np.ascontiguousarray(data[:, :, :3], dtype=np.uint8)
+                    if ffmpeg_proc is None:
+                        ffmpeg_proc = _start_ffmpeg(rgb.shape[1], rgb.shape[0])
+                    ffmpeg_proc.stdin.write(rgb.tobytes())
+
         # -- Progress --
         if step_count % (render_every * 120) == 0:
             rtf = sim_time / max(time.perf_counter() - wall_t0, 1e-9)
@@ -809,6 +846,10 @@ def main():
 
     wall_elapsed = time.perf_counter() - wall_t0
     csv_file.close()
+    if ffmpeg_proc is not None:
+        ffmpeg_proc.stdin.close()
+        ffmpeg_proc.wait()
+        print(f"Video saved: {VIDEO_PATH}")
 
     print("=" * 70)
     print(f"Done: t={sim_time:.2f}s  wall={wall_elapsed:.1f}s "

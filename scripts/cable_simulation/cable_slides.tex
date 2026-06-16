@@ -1,0 +1,235 @@
+% =============================================================================
+% Flexible Cable Simulation in NVIDIA Isaac Sim -- progress slides
+% Build:  pdflatex cable_slides.tex  (run twice).  Madrid theme = always compiles.
+% Images are read from ../approachX_*/frame.png (produced by run_all_and_capture.sh);
+% if a frame is missing the slide shows a labelled placeholder, so this always builds.
+% =============================================================================
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+\usecolortheme{whale}                 % dark navy/blue -- clean and professional
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{caption}[numbered]
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tikz}
+
+% Show a frame.png if it exists, else a neat placeholder box (keeps it compiling).
+\newcommand{\simframe}[2]{%   #1 = path, #2 = caption under the image
+  \begin{center}
+  \IfFileExists{#1}{%
+    \includegraphics[height=0.62\textheight,keepaspectratio]{#1}%
+  }{%
+    \begin{tikzpicture}
+      \draw[gray!50,dashed,fill=gray!8] (0,0) rectangle (9,5.0);
+      \node[gray] at (4.5,2.5) {\large [ image pending --- run capture script ]};
+    \end{tikzpicture}%
+  }\\[2pt]
+  {\footnotesize\itshape #2}
+  \end{center}}
+
+\title[Cable Simulation in Isaac Sim]{Flexible Cable Simulation in NVIDIA Isaac Sim}
+\subtitle{Comparing three modelling approaches for RL-based cable manipulation}
+\author[A. Baniasad]{Ali Baniasad}
+\institute[U. Waterloo]{Supervisor: Prof.\ Soo Jeon \\ University of Waterloo}
+\date{June 2026}
+
+\begin{document}
+
+% ---------- 1. Title ----------
+\begin{frame}[plain]\titlepage\end{frame}
+
+% ---------- 2. Motivation ----------
+\begin{frame}{Motivation}
+  \begin{itemize}
+    \item \textbf{Why cables?} wire-harness assembly, cable routing, and
+          deformable-object manipulation are common, unsolved robotics tasks.
+    \item \textbf{The challenge:} Isaac Sim has \emph{no native 1-D deformable
+          (rod/cable) body} -- only rigid bodies and volumetric FEM soft bodies.
+    \item \textbf{The goal:} find the cable model that is realistic \emph{and}
+          fast \emph{and} robot-coupled enough for \textbf{RL-based cable
+          manipulation} with domain randomization.
+  \end{itemize}
+  \vfill
+  {\footnotesize We evaluate three approaches, each in two scenarios
+   (free cable, and cable held by a Franka arm).}
+\end{frame}
+
+% ---------- 3. Overview ----------
+\begin{frame}{Three approaches}
+  \begin{columns}[t]
+    \column{0.33\textwidth}\centering
+      \textbf{1. Capsule chain}\\\smallskip
+      {\footnotesize rigid capsules + D6 joints; bending from Euler--Bernoulli
+       beam theory (PhysX).}
+    \column{0.33\textwidth}\centering
+      \textbf{2. Cosserat rod (Warp)}\\\smallskip
+      {\footnotesize 1-D position-based elastic rod in NVIDIA Warp, after the
+       \emph{OGC} SIGGRAPH-2025 paper.}
+    \column{0.33\textwidth}\centering
+      \textbf{3. FEM deformable}\\\smallskip
+      {\footnotesize Isaac Sim's built-in volumetric soft body (tetrahedral FEM).}
+  \end{columns}
+  \vfill
+  \begin{center}\footnotesize
+  Two scenarios each $\Rightarrow$ \textbf{6 simulations}:
+  (A) free hanging/swinging cable \quad (B) cable connected to a robot manipulator.
+  \end{center}
+\end{frame}
+
+% ---------- 4. Approach 1 -- cable only ----------
+\begin{frame}{Approach 1 --- Capsule chain (D6 joints)}
+  \begin{columns}[c]
+    \column{0.46\textwidth}
+      \begin{itemize}\footnotesize
+        \item Rigid capsules linked by \textbf{D6 joints}; translations locked
+              (inextensible), bending springs $k=EI/L$ from beam theory.
+        \item PhysX \textbf{TGS} solver, up to 200 links, 240\,Hz.
+        \item Reproduces the \textbf{Govoni et al.\ 2025} stability sweep.
+        \item Modes: hanging-kick and both-ends-fixed.
+      \end{itemize}
+    \column{0.54\textwidth}
+      \simframe{../approach1_cable_only/frame.png}{Video: approach1\_cable\_only/video.mp4 (shared folder)}
+  \end{columns}
+\end{frame}
+
+% ---------- 5. Approach 1 -- robot ----------
+\begin{frame}{Approach 1 --- With robot}
+  \simframe{../approach1_robot/frame.png}{Video: approach1\_robot/video.mp4 (shared folder)}
+  \begin{center}\footnotesize
+  Ends tied to the gripper via \textbf{ball joints} (pin) $\Rightarrow$ the cable
+  droops at the connection and \textbf{drags the second arm} (two-way coupling). Stable.
+  \end{center}
+\end{frame}
+
+% ---------- 6. Approach 2 -- cable only ----------
+\begin{frame}{Approach 2 --- Cosserat rod in NVIDIA Warp}
+  \begin{columns}[c]
+    \column{0.46\textwidth}
+      \begin{itemize}\footnotesize
+        \item 1-D \textbf{Cosserat / XPBD} elastic rod: inextensible stretch +
+              bending stiffness + gravity, solved on the GPU in \textbf{Warp}.
+        \item Idea from the \textbf{OGC} paper (Chen et al., SIGGRAPH 2025):
+              penetration-free contact for cloth \& rods.
+        \item Truly \textbf{thin} (no FEM fattening); \textbf{exact}
+              node-vs-primitive collision.
+      \end{itemize}
+    \column{0.54\textwidth}
+      \simframe{../approach2_cable_only/frame.png}{Video: approach2\_cable\_only/video.mp4 (shared folder)}
+  \end{columns}
+\end{frame}
+
+% ---------- 7. Approach 2 -- robot ----------
+\begin{frame}{Approach 2 --- With robot}
+  \simframe{../approach2_robot/frame.png}{Video: approach2\_robot/video.mp4 (shared folder)}
+  \begin{center}\footnotesize
+  End nodes \textbf{pinned} to the gripper poses each frame $\Rightarrow$ the cable
+  follows the arms cleanly, but the rod \textbf{exerts no force back} (one-way coupling).
+  \end{center}
+\end{frame}
+
+% ---------- 8. Approach 3 -- cable only ----------
+\begin{frame}{Approach 3 --- FEM deformable (Isaac Sim)}
+  \begin{columns}[c]
+    \column{0.46\textwidth}
+      \begin{itemize}\footnotesize
+        \item Isaac Sim's built-in \textbf{volumetric} (tetrahedral) FEM soft body.
+        \item TPU material: $E=40$\,MPa, $\nu=0.48$, $\rho=1150$\,kg/m$^3$.
+        \item Rod \textbf{fattened} to 12\,mm and $E$ rescaled so it bends/weighs
+              like the real 1.5\,mm cable (voxeliser needs $\geq3$ hexes across).
+        \item Rendered thin via a swept tube on its centreline.
+      \end{itemize}
+    \column{0.54\textwidth}
+      \simframe{../approach3_cable_only/frame.png}{Video: approach3\_cable\_only/video.mp4 (shared folder)}
+  \end{columns}
+\end{frame}
+
+% ---------- 9. Approach 3 -- robot ----------
+\begin{frame}{Approach 3 --- With robot}
+  \simframe{../approach3_robot/frame.png}{Video: approach3\_robot/video.mp4 (shared folder)}
+  \begin{center}\footnotesize
+  Attached to the gripper by a \textbf{region weld} (auto-attachment): holds and
+  transmits force, but is \textbf{rigid/straight near the joint} and stretches.
+  \end{center}
+\end{frame}
+
+% ---------- 10. Comparison table ----------
+\begin{frame}{Comparison}
+  \centering\renewcommand{\arraystretch}{1.25}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{Criteria} & \textbf{D6 capsule} & \textbf{Cosserat (Warp)} & \textbf{FEM} \\
+    \midrule
+    Realism             & Good (beam bending) & \textbf{Excellent} (1-D rod) & Fair (jelly/stretch) \\
+    Stability           & \textbf{Excellent}  & \textbf{Excellent}          & Fair \\
+    Compute cost        & Low (real-time)     & Low ($\sim$1.4$\times$ RT)  & High ($<$0.2$\times$ RT) \\
+    Ease of setup       & Moderate            & Moderate (custom Warp)      & \textbf{Easy} (built-in) \\
+    RL readiness        & \textbf{High}       & Medium                      & Low \\
+    Robot integration   & Two-way (force)     & One-way (kinematic)         & Two-way (rough) \\
+    Domain randomization& \textbf{Easy}       & Easy                        & Harder \\
+    \bottomrule
+  \end{tabular}
+  \vfill
+  {\footnotesize RT = real time. ``Two-way'' = the robot feels the cable's reaction force.}
+\end{frame}
+
+% ---------- 11. Pros / cons ----------
+\begin{frame}{Pros and cons}
+  \footnotesize
+  \textbf{1. Capsule chain (D6 joints)}
+  \begin{itemize}\itemsep1pt
+    \item[\textcolor{green!50!black}{+}] Stable over a wide parameter range; physically grounded; real-time; \textbf{two-way} robot coupling; easy domain randomization.
+    \item[\textcolor{red!70!black}{--}] No axial elasticity (links can't stretch); needs many links for a smooth look; free twist DOF needs damping.
+  \end{itemize}
+  \textbf{2. Cosserat rod in Warp (OGC)}
+  \begin{itemize}\itemsep1pt
+    \item[\textcolor{green!50!black}{+}] Most faithful cable: thin, inextensible, no jelly; exact, penetration-free collision; GPU-fast.
+    \item[\textcolor{red!70!black}{--}] \textbf{One-way} robot coupling (no reaction force on the arm); custom Warp code (not a native Isaac body); no volumetric contact.
+  \end{itemize}
+  \textbf{3. FEM deformable}
+  \begin{itemize}\itemsep1pt
+    \item[\textcolor{green!50!black}{+}] Most realistic volumetric deformation; handles complex geometry; built into Isaac Sim; two-way.
+    \item[\textcolor{red!70!black}{--}] Expensive; must be fattened (can't be thin); stretches; rough simplified collision; rigid clamp at the attachment; slow for RL.
+  \end{itemize}
+\end{frame}
+
+% ---------- 12. Recommendation ----------
+\begin{frame}{Recommendation}
+  \begin{block}{For RL-based cable manipulation: the \textbf{capsule chain (D6 joints)}}
+  \begin{itemize}\footnotesize
+    \item Only model that is simultaneously \textbf{stable, real-time, and two-way
+          robot-coupled} -- the robot actually feels the cable, which RL needs.
+    \item Physically grounded (beam theory) and \textbf{easy to domain-randomize}
+          (per-joint stiffness/damping/mass).
+  \end{itemize}
+  \end{block}
+  \begin{itemize}\footnotesize
+    \item Use the \textbf{Warp Cosserat rod} as a high-fidelity reference / for
+          visualization and contact-rich studies (penetration-free, exact collision).
+    \item Use \textbf{FEM} only when a genuine \emph{volumetric} soft body
+          (squashing/draping) is required -- not for fast RL.
+  \end{itemize}
+\end{frame}
+
+% ---------- 13. Next steps ----------
+\begin{frame}{Next steps}
+  \begin{itemize}
+    \item \textbf{RL training} of a cable-manipulation policy on the capsule model.
+    \item \textbf{Domain randomization}: cable stiffness, damping, mass, length,
+          friction; robot dynamics.
+    \item \textbf{Two-way coupling} study: how the cable's reaction shapes the policy.
+    \item \textbf{Physical validation} against a real TPU cable.
+    \item Before arriving at Waterloo: finalize the env + reward and a first
+          sim-to-sim transfer between the three models.
+  \end{itemize}
+\end{frame}
+
+% ---------- 14. Thanks ----------
+\begin{frame}[plain]
+  \centering\vfill
+  {\Large Thank you}\\[1em]
+  {\large Questions?}\\[2em]
+  {\footnotesize Ali Baniasad --- Supervisor: Prof.\ Soo Jeon, University of Waterloo}
+  \vfill
+\end{frame}
+
+\end{document}

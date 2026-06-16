@@ -246,6 +246,11 @@ def cube(name, pos, size, color):
 
 anchor_path, anchor_cube = cube("anchor", ANCHOR_POS, 0.05, [0.2, 0.4, 0.8])     # steady
 handle_path, handle_cube = cube("handle", HANDLE_POS, 0.06, [0.95, 0.55, 0.05])  # MOVE THIS
+if RECORD:
+    # Cable-only recording: both ends stay fixed, hide the orange handle cube, and
+    # let the cable SAG/fall onto the sphere (no moving cube to detach from).
+    UsdGeom.Imageable(stage.GetPrimAtPath(handle_path)).MakeInvisible()
+    UsdGeom.Imageable(stage.GetPrimAtPath(anchor_path)).MakeInvisible()
 
 if USE_SPHERE:
     sph = UsdGeom.Sphere.Define(stage, "/World/obstacle")
@@ -348,14 +353,16 @@ try:
     # When recording (or self-testing) run a FINITE clip and SCRIPT the handle so
     # the cable visibly deforms; otherwise (interactive GUI) loop until the user quits.
     while simulation_app.is_running() and ((not HEADLESS and not RECORD) or step < total):
-        if SELFTEST or RECORD:
+        if SELFTEST:
             ang = 0.6 * math.sin(2.0 * math.pi * 0.25 * step * RENDER_DT)
             hp = np.array([0.4 + 0.3 * math.sin(ang), 0.3 * math.sin(2 * ang),
                            1.5 - 0.4 * abs(math.sin(ang))])
             handle_cube.set_world_pose(hp, None)
             handle = hp
+        elif RECORD:
+            handle = HANDLE_POS          # fixed 2nd anchor -> cable sags onto the sphere
         else:
-            handle = handle_world_pos()
+            handle = handle_world_pos()  # interactive: follow the mouse-moved cube
 
         P = step_rod(ANCHOR_POS, handle)
         update_tube(P)

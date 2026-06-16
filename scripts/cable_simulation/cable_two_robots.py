@@ -10,18 +10,20 @@ motion transmitted through it. (Pulling along the cable transmits; a sideways
 swing would just bend it. Set CABLE_TRAJ_JOINT=panda_joint1 / CABLE_FOLLOWER_SOFT=0
 for the old hold-rigid behaviour.)
 
-How well it transmits is itself a result: the inextensible CAPSULE chain drags the
-follower most, the soft FEM cable a bit less (it stretches), and WARP not at all
-(its rod exerts no force on the arms -- one-way coupling). Runs with all three:
+ALL THREE methods now transmit force and drag the follower (capsule ~6 cm, warp
+~6 cm, FEM ~4 cm; FEM least because it stretches). Runs with all three:
 
   CABLE_METHOD=capsule      rigid capsule chain + D6 joints      (cable.py)
   CABLE_METHOD=deformable   FEM deformable cylinder, fattened    (cable_fem.py)
   CABLE_METHOD=warp         1-D Cosserat/XPBD elastic rod (Warp) (cable_warp.py)
 
 All physical targets come from cable_config.py (E, radius, density). The capsule
-and FEM cables are real PhysX bodies jointed/attached to the panda_hand TCPs; the
-Warp rod is a 1-D rod whose two end nodes are pinned to the two TCPs every frame
-(it sags/bends between them but exerts no force back on the arms). FEM fattens its
+and FEM cables are real PhysX bodies jointed/attached to the panda_hand TCPs. The
+Warp rod is a 1-D rod whose end nodes are SPRING-coupled to the two TCPs (two-way):
+the spring pulls the rod to the gripper AND its reaction force is applied back onto
+the arm (set_external_force_and_torque), so the rod can drag the follower like a
+real cable. It runs slightly TAUT (CABLE_GRIP_FACTOR=1.5) for strong transmission.
+Set ROD_COUPLE_K=0 for the old one-way (follow-only, no force back). FEM fattens its
 rod (12 mm) and rescales E/density so it still bends/weighs like the 1.5 mm cable.
 
 All three write the same trajectory.csv / summary.json layout (incl. wall-clock
@@ -112,9 +114,10 @@ ANGULAR_DAMPING    = 0.10
 # and rescale E by (r/R)^exp and density by (r/R)^2 so it still bends/weighs like
 # the real 1.5 mm cable (same trick as cable_fem.py).
 FEM_SIM_RADIUS     = float(os.environ.get("CABLE_FEM_SIM_RADIUS", 12e-3))   # fat rod
-# 4 = EXACT EI (floppy, bends like a real cable -- default here since there's no
-# contact, just hanging between grippers); 2.5 = firm (was too rigid at the base).
-FEM_E_EXP          = float(os.environ.get("CABLE_FEM_E_EXP", 4.0))
+# 2.5 = firm: axially stiff so it barely STRETCHES and transmits more force to drag
+# the follower (the robot demo's point). 4 = exact-EI floppy, but it stretches and
+# transmits less. Firm is the better default for the two-robot transmission demo.
+FEM_E_EXP          = float(os.environ.get("CABLE_FEM_E_EXP", 2.5))
 FEM_E_MIN          = float(os.environ.get("CABLE_FEM_E_MIN", 5.0e3))        # Pa floor (low=soft)
 _fem_ratio         = CABLE_RADIUS / FEM_SIM_RADIUS                          # < 1
 FEM_E              = max(YOUNG_MODULUS * _fem_ratio ** FEM_E_EXP, FEM_E_MIN)  # Pa
@@ -214,7 +217,10 @@ TWIST_DAMPING    = float(os.environ.get("CABLE_TWIST_DAMP", 0.02))
 # spreads the bases farther, but then the cable can't reach -> FEM detaches and the
 # capsule chain snaps taut/unstable, so keep it at 1.0 (transmission is via the
 # axial pull below, not by over-stretching the cable).
-GRIP_FACTOR = float(os.environ.get("CABLE_GRIP_FACTOR", 1.0))   # 1.0=reaches grippers
+# warp is spring-coupled (no hard attachment to break), so it can run TAUT (1.5) for
+# strong force transmission; capsule/FEM must stay at 1.0 or the cable detaches.
+GRIP_FACTOR = float(os.environ.get("CABLE_GRIP_FACTOR",
+                                   1.5 if CABLE_METHOD == "warp" else 1.0))
 TCP_LOCAL = HAND_LOCAL_POS + np.array([0.0, 0.0, -HAND_TCP_DROP])  # in base frame
 BASE_X    = GRIP_FACTOR * CABLE_LENGTH / 2.0 + TCP_LOCAL[0]
 ANCHOR_LEAD = np.array([-CABLE_LENGTH / 2.0,  TCP_LOCAL[1], TCP_LOCAL[2]])
@@ -400,6 +406,14 @@ ROD_SUBSTEPS = int(os.environ.get("ROD_SUBSTEPS", 16))
 ROD_ITERS    = int(os.environ.get("ROD_ITERS", 12))
 ROD_DAMP     = float(os.environ.get("ROD_DAMPING", 0.02))
 ROD_VIS_SEG  = 10
+# TWO-WAY coupling: instead of rigidly pinning the rod ends to the grippers, connect
+# each end to its gripper with a stiff spring-damper. The spring pulls the rod end to
+# the gripper AND its reaction force is applied back onto the arm -> the rod can DRAG
+# the (compliant) follower, like a real cable. End nodes get a small lumped mass so
+# the stiff spring stays stable. Set ROD_COUPLE_K=0 for the old one-way (no force back).
+ROD_COUPLE_K  = float(os.environ.get("ROD_COUPLE_K", 400.0))   # N/m  end<->gripper spring
+ROD_COUPLE_C  = float(os.environ.get("ROD_COUPLE_C", 3.0))     # N.s/m damping
+ROD_END_MASS  = float(os.environ.get("ROD_END_MASS", 0.02))    # kg   lumped end mass
 
 
 def _build_warp_rod_class():
@@ -426,6 +440,25 @@ def _build_warp_rod_class():
             x[0] = a
         if i == n - 1:
             x[n - 1] = h
+
+    # Gravity for every node, PLUS a spring-damper on the two end nodes pulling them
+    # toward the gripper TCPs (ta, tb). This is the two-way link: the same spring
+    # force is read back (Python side) and applied to the arms.
+    @wp.kernel
+    def predict_coupled(x: wp.array(dtype=wp.vec3), x_prev: wp.array(dtype=wp.vec3),
+                        v: wp.array(dtype=wp.vec3), invm: wp.array(dtype=float),
+                        g: float, dt: float, ta: wp.vec3, tb: wp.vec3,
+                        k: float, c: float, n: int):
+        i = wp.tid()
+        x_prev[i] = x[i]
+        if invm[i] > 0.0:
+            acc = wp.vec3(0.0, 0.0, g)
+            if i == 0:
+                acc = acc + (k * (ta - x[0]) - c * v[0]) * invm[0]
+            if i == n - 1:
+                acc = acc + (k * (tb - x[n - 1]) - c * v[n - 1]) * invm[n - 1]
+            v[i] = v[i] + acc * dt
+            x[i] = x[i] + v[i] * dt
 
     @wp.kernel
     def solve_rod(x: wp.array(dtype=wp.vec3), invm: wp.array(dtype=float),
@@ -476,7 +509,10 @@ def _build_warp_rod_class():
             self.v = wp.zeros(self.n, dtype=wp.vec3, device=dev)
             m_node = CABLE_MASS / self.n
             invm = np.full(self.n, 1.0 / m_node, dtype=np.float32)
-            invm[0] = 0.0; invm[-1] = 0.0           # both ends pinned to grippers
+            if ROD_COUPLE_K > 0.0:                  # two-way: ends are FREE (spring-coupled)
+                invm[0] = invm[-1] = 1.0 / ROD_END_MASS
+            else:                                   # one-way: ends rigidly pinned
+                invm[0] = invm[-1] = 0.0
             self.invm = wp.array(invm, dtype=float, device=dev)
             seg = CABLE_LENGTH / (self.n - 1)
             self.rest = wp.array(np.full(self.n - 1, seg, dtype=np.float32),
@@ -504,17 +540,31 @@ def _build_warp_rod_class():
             sdt = dt / ROD_SUBSTEPS
             a_s = ROD_STRETCH / (sdt * sdt)
             a_b = ROD_BEND / (sdt * sdt)
+            two_way = ROD_COUPLE_K > 0.0
             for _ in range(ROD_SUBSTEPS):
-                wp.launch(predict, dim=self.n,
-                          inputs=[self.x, self.xprev, self.v, self.invm, -9.81, sdt], device=dev)
-                wp.launch(set_pins, dim=self.n, inputs=[self.x, a, h, self.n], device=dev)
+                if two_way:
+                    wp.launch(predict_coupled, dim=self.n,
+                              inputs=[self.x, self.xprev, self.v, self.invm, -9.81, sdt,
+                                      a, h, ROD_COUPLE_K, ROD_COUPLE_C, self.n], device=dev)
+                else:
+                    wp.launch(predict, dim=self.n,
+                              inputs=[self.x, self.xprev, self.v, self.invm, -9.81, sdt], device=dev)
+                    wp.launch(set_pins, dim=self.n, inputs=[self.x, a, h, self.n], device=dev)
                 wp.launch(solve_rod, dim=1,
                           inputs=[self.x, self.invm, self.rest, self.n, ROD_ITERS, a_s, a_b], device=dev)
-                wp.launch(set_pins, dim=self.n, inputs=[self.x, a, h, self.n], device=dev)
+                if not two_way:
+                    wp.launch(set_pins, dim=self.n, inputs=[self.x, a, h, self.n], device=dev)
                 wp.launch(finalize, dim=self.n,
                           inputs=[self.x, self.xprev, self.v, self.invm, sdt, ROD_DAMP], device=dev)
             P = self.x.numpy()
             self._update_tube(P)
+            # Force the rod exerts back on each gripper = -(spring force on the end node)
+            # = K*(end_node - gripper).  (Zero in one-way mode.)
+            if two_way:
+                self.force_a = ROD_COUPLE_K * (P[0] - np.asarray(end_a))
+                self.force_b = ROD_COUPLE_K * (P[-1] - np.asarray(end_b))
+            else:
+                self.force_a = np.zeros(3); self.force_b = np.zeros(3)
             return P
 
         def _update_tube(self, P):
@@ -722,8 +772,9 @@ def main():
     print(f"  hold target captured (leader hand z should stay ~{tcp_of(leader)[2]:.2f} m)")
 
     # Soften the FOLLOWER's arm joints so the cable can DRAG it (force transmission).
-    # warp exerts no force on the arms, so leave it stiff there.
-    if FOLLOWER_SOFT and CABLE_METHOD != "warp":
+    # warp now applies its spring reaction force to the arms (two-way), so soften it too.
+    _warp_two_way = (CABLE_METHOD == "warp" and ROD_COUPLE_K > 0.0)
+    if FOLLOWER_SOFT and (CABLE_METHOD != "warp" or _warp_two_way):
         arm_ids = [follower.joint_names.index(f"panda_joint{i}") for i in range(1, 8)]
         st = follower.data.joint_stiffness.clone()
         dm = follower.data.joint_damping.clone()
@@ -734,9 +785,20 @@ def main():
         follower.write_joint_damping_to_sim(dm)
         print(f"  FOLLOWER is COMPLIANT (arm stiffness {FOLLOWER_STIFFNESS}) -- the cable "
               f"drags it when the leader moves (CABLE_FOLLOWER_SOFT=0 to hold rigid)")
-    elif CABLE_METHOD == "warp":
-        print("  NOTE: warp rod exerts no force on the arms, so the follower won't be "
-              "dragged (one-way coupling). Use capsule/deformable to see transmission.")
+
+    # Two-way warp: the rod's reaction forces on the two grippers, applied each step.
+    warp_force_l = np.zeros(3, dtype=np.float32)
+    warp_force_f = np.zeros(3, dtype=np.float32)
+
+    def _apply_warp_forces():
+        if not _warp_two_way:
+            return
+        f_l = torch.zeros((1, len(leader.body_names), 3), device=leader.device)
+        f_f = torch.zeros((1, len(follower.body_names), 3), device=follower.device)
+        f_l[0, hand_idx] = torch.tensor(warp_force_l, device=leader.device)
+        f_f[0, hand_idx] = torch.tensor(warp_force_f, device=follower.device)
+        leader.set_external_force_and_torque(f_l, torch.zeros_like(f_l))
+        follower.set_external_force_and_torque(f_f, torch.zeros_like(f_f))
 
     # CSV
     csv_file = open(CSV_PATH, "w", newline="")
@@ -769,6 +831,7 @@ def main():
             leader_targets[0, j1_idx] = q1_default + TRAJ_AMPLITUDE_RAD * math.sin(phase)
         leader.set_joint_position_target(leader_targets)
         follower.set_joint_position_target(follower_targets)
+        _apply_warp_forces()              # two-way warp: rod pulls on the grippers
         leader.write_data_to_sim()
         follower.write_data_to_sim()
 
@@ -807,9 +870,12 @@ def main():
                 if fem_thin_tube is not None:                          # redraw thin tube
                     P = fem_centerline(nodes_np, fem_rest_x, THIN_NODES)
                     sweep_thin_tube(fem_thin_tube, P, VIS_RADIUS)
-            else:   # warp -- advance the rod pinned to the two TCPs, render the tube
+            else:   # warp -- advance the rod, render the tube, read its grip forces
                 warp_P = warp_rod.step(tcp_l, tcp_f, RENDER_DT)
                 mid = warp_P[mid_index]
+                # clamp the reaction forces (avoid a transient spike destabilising the arm)
+                warp_force_l[:] = np.clip(warp_rod.force_a, -40.0, 40.0)
+                warp_force_f[:] = np.clip(warp_rod.force_b, -40.0, 40.0)
                 ok = bool(np.all(np.isfinite(warp_P))) and float(np.max(np.abs(warp_P))) < 50.0
                 speed = 0.0 if ok else 1.0e9
                 threshold = 1.0

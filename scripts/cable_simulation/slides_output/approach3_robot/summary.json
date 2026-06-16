@@ -14,10 +14,10 @@
   "settle_seconds": 1.0,
   "physics_dt_s": 0.004166666666666667,
   "total_sim_time_s": 10.00416666666642,
-  "wall_clock_s": 161.556501915009,
-  "realtime_factor": 0.06192364001499223,
+  "wall_clock_s": 165.24245874298504,
+  "realtime_factor": 0.06054234936207715,
   "stable": true,
   "instability_at_s": null,
-  "max_speed_metric": 2.125743865966797,
+  "max_speed_metric": 1.5218740701675415,
   "csv_path": "/home/ali/Documents/me/IsaacLab/scripts/cable_simulation/slides_output/approach3_robot/trajectory.csv"
 }

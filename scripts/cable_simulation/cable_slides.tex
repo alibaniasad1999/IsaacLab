@@ -122,8 +122,9 @@
 \begin{frame}{Approach 2 --- With robot}
   \simframe{../approach2_robot/frame.png}{Video: approach2\_robot/video.mp4 (shared folder)}
   \begin{center}\footnotesize
-  End nodes \textbf{pinned} to the gripper poses each frame $\Rightarrow$ the cable
-  follows the arms cleanly, but the rod \textbf{exerts no force back} (one-way coupling).
+  End nodes \textbf{spring-coupled} to the grippers (two-way): the rod follows the
+  arms \emph{and} its reaction force is applied back $\Rightarrow$ it \textbf{drags the
+  follower} ($\sim$6\,cm), like a real cable.
   \end{center}
 \end{frame}
 
@@ -163,8 +164,8 @@
     Stability           & \textbf{Excellent}  & \textbf{Excellent}          & Fair \\
     Compute cost        & Low (real-time)     & Low ($\sim$1.4$\times$ RT)  & High ($<$0.2$\times$ RT) \\
     Ease of setup       & Moderate            & Moderate (custom Warp)      & \textbf{Easy} (built-in) \\
-    RL readiness        & \textbf{High}       & Medium                      & Low \\
-    Robot integration   & Two-way (force)     & One-way (kinematic)         & Two-way (rough) \\
+    RL readiness        & \textbf{High}       & \textbf{High}               & Low \\
+    Robot integration   & Two-way (force)     & Two-way (spring-coupled)    & Two-way (rough) \\
     Domain randomization& \textbf{Easy}       & Easy                        & Harder \\
     \bottomrule
   \end{tabular}
@@ -182,8 +183,8 @@
   \end{itemize}
   \textbf{2. Cosserat rod in Warp (OGC)}
   \begin{itemize}\itemsep1pt
-    \item[\textcolor{green!50!black}{+}] Most faithful cable: thin, inextensible, no jelly; exact, penetration-free collision; GPU-fast.
-    \item[\textcolor{red!70!black}{--}] \textbf{One-way} robot coupling (no reaction force on the arm); custom Warp code (not a native Isaac body); no volumetric contact.
+    \item[\textcolor{green!50!black}{+}] Most faithful cable: thin, inextensible, no jelly; exact, penetration-free collision; GPU-fast; \textbf{two-way} robot coupling (spring + reaction force) drags the arm.
+    \item[\textcolor{red!70!black}{--}] Custom Warp code (not a native Isaac body); coupling to the robot is via a spring (needs tuning); no volumetric contact.
   \end{itemize}
   \textbf{3. FEM deformable}
   \begin{itemize}\itemsep1pt

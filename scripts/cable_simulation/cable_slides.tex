@@ -96,8 +96,8 @@
 \begin{frame}{Approach 1 --- With robot}
   \simframe{../approach1_robot/frame.png}{Video: approach1\_robot/video.mp4 (shared folder)}
   \begin{center}\footnotesize
-  Ends tied to the gripper via \textbf{ball joints} (pin) $\Rightarrow$ the cable
-  droops at the connection and \textbf{drags the second arm} (two-way coupling). Stable.
+  Inextensible (rigid joints): a hard pull \textbf{drags the second arm $\sim$17\,cm}
+  while the cable barely stretches ($\sim$5\,cm) $\Rightarrow$ \textbf{true force transmission}.
   \end{center}
 \end{frame}
 
@@ -122,9 +122,9 @@
 \begin{frame}{Approach 2 --- With robot}
   \simframe{../approach2_robot/frame.png}{Video: approach2\_robot/video.mp4 (shared folder)}
   \begin{center}\footnotesize
-  End nodes \textbf{spring-coupled} to the grippers (two-way): the rod follows the
-  arms \emph{and} its reaction force is applied back $\Rightarrow$ it \textbf{drags the
-  follower} ($\sim$6\,cm), like a real cable.
+  End nodes \textbf{spring-coupled} to the grippers (two-way). It follows the arms,
+  but under a hard pull the spring gives $\Rightarrow$ it \textbf{stretches} and drags
+  the follower only a little ($\sim$3\,cm).
   \end{center}
 \end{frame}
 
@@ -148,8 +148,8 @@
 \begin{frame}{Approach 3 --- With robot}
   \simframe{../approach3_robot/frame.png}{Video: approach3\_robot/video.mp4 (shared folder)}
   \begin{center}\footnotesize
-  Attached to the gripper by a \textbf{region weld} (auto-attachment): holds and
-  transmits force, but is \textbf{rigid/straight near the joint} and stretches.
+  Region-weld attachment. Being a soft body it \textbf{stretches a lot} under a hard
+  pull ($\sim$20--35\%) and drags the follower little $\Rightarrow$ poor force transmission.
   \end{center}
 \end{frame}
 
@@ -165,7 +165,7 @@
     Compute cost        & Low (real-time)     & Low ($\sim$1.4$\times$ RT)  & High ($<$0.2$\times$ RT) \\
     Ease of setup       & Moderate            & Moderate (custom Warp)      & \textbf{Easy} (built-in) \\
     RL readiness        & \textbf{High}       & \textbf{High}               & Low \\
-    Robot integration   & Two-way (force)     & Two-way (spring-coupled)    & Two-way (rough) \\
+    Force transmission  & \textbf{Strong} ($\sim$17\,cm) & Weak (stretches)   & Weak (stretches) \\
     Domain randomization& \textbf{Easy}       & Easy                        & Harder \\
     \bottomrule
   \end{tabular}

@@ -10,8 +10,10 @@ motion transmitted through it. (Pulling along the cable transmits; a sideways
 swing would just bend it. Set CABLE_TRAJ_JOINT=panda_joint1 / CABLE_FOLLOWER_SOFT=0
 for the old hold-rigid behaviour.)
 
-ALL THREE methods now transmit force and drag the follower (capsule ~6 cm, warp
-~6 cm, FEM ~4 cm; FEM least because it stretches). Runs with all three:
+Under a hard pull the methods separate clearly: the rigid inextensible CAPSULE drags
+the follower far (~17 cm) while the cable barely stretches (~5 cm); the FEM soft body
+and the spring-coupled WARP rod mostly STRETCH (20-35%) and drag little (~3-4 cm).
+So only the capsule truly transmits force like a real cable. Runs with all three:
 
   CABLE_METHOD=capsule      rigid capsule chain + D6 joints      (cable.py)
   CABLE_METHOD=deformable   FEM deformable cylinder, fattened    (cable_fem.py)
@@ -102,7 +104,10 @@ ELASTICITY_DAMPING = float(os.environ.get("CABLE_EDAMP",    0.005))    # FEM onl
 
 # -- Capsule-chain parameters --
 NUM_LINKS          = int(os.environ.get("CABLE_NUM_LINKS",  60))
-POS_ITERS          = int(os.environ.get("CABLE_POS_ITERS",  32))
+# 180 solver iterations keep the chain INEXTENSIBLE under a hard pull, so it drags the
+# follower far instead of stretching (32 left ~13 cm stretch; 180 -> ~5 cm and a 17 cm
+# drag). >180 goes unstable. This is what makes it transmit force like a real cable.
+POS_ITERS          = int(os.environ.get("CABLE_POS_ITERS",  180))
 VEL_ITERS          = int(os.environ.get("CABLE_VEL_ITERS",  4))  # TGS caps at 4
 LINEAR_DAMPING     = 0.05
 ANGULAR_DAMPING    = 0.10
@@ -140,11 +145,12 @@ VIS_RADIUS         = float(os.environ.get("CABLE_VIS_RADIUS", CABLE_RADIUS))  # 
 THIN_NODES         = int(os.environ.get("CABLE_VIS_NODES", 40))   # centreline samples
 
 # -- Robot / trajectory --
-# Bigger + faster leader pull so the cable visibly drags the follower (~6 cm at
-# capsule). Push further (amp 0.7, freq 1.0) for more drag, but the cable starts
-# to whip; 0.5/0.8 is the clear-but-stable sweet spot.
+# BIG leader pull so the cable visibly DRAGS the follower far (~17 cm at capsule with
+# the stiff solver below). The pull goes well past the cable length, so a rigid cable
+# must drag the follower to follow -- which is the whole point. (The residual stretch
+# is small vs the movement; lower CABLE_TRAJ_AMP if you want zero stretch but less drag.)
 TRAJ_AMPLITUDE_RAD = float(os.environ.get("CABLE_TRAJ_AMP",  0.5))   # shoulder swing (rad)
-TRAJ_FREQUENCY_HZ  = float(os.environ.get("CABLE_TRAJ_FREQ", 0.8))   # Hz
+TRAJ_FREQUENCY_HZ  = float(os.environ.get("CABLE_TRAJ_FREQ", 0.6))   # Hz
 SETTLE_SECONDS     = float(os.environ.get("CABLE_SETTLE",    1.0))
 # Make the FOLLOWER arm COMPLIANT (soft PD) so the cable's tension can DRAG it when
 # the leader moves -- this is what shows force/motion transmission through the cable.
@@ -217,10 +223,9 @@ TWIST_DAMPING    = float(os.environ.get("CABLE_TWIST_DAMP", 0.02))
 # spreads the bases farther, but then the cable can't reach -> FEM detaches and the
 # capsule chain snaps taut/unstable, so keep it at 1.0 (transmission is via the
 # axial pull below, not by over-stretching the cable).
-# warp is spring-coupled (no hard attachment to break), so it can run TAUT (1.5) for
-# strong force transmission; capsule/FEM must stay at 1.0 or the cable detaches.
-GRIP_FACTOR = float(os.environ.get("CABLE_GRIP_FACTOR",
-                                   1.5 if CABLE_METHOD == "warp" else 1.0))
+# Keep the robots at cable-length spacing (1.0) so the cable REACHES both grippers
+# (spacing them farther made the inextensible rod fall short -> looked "stretched").
+GRIP_FACTOR = float(os.environ.get("CABLE_GRIP_FACTOR", 1.0))
 TCP_LOCAL = HAND_LOCAL_POS + np.array([0.0, 0.0, -HAND_TCP_DROP])  # in base frame
 BASE_X    = GRIP_FACTOR * CABLE_LENGTH / 2.0 + TCP_LOCAL[0]
 ANCHOR_LEAD = np.array([-CABLE_LENGTH / 2.0,  TCP_LOCAL[1], TCP_LOCAL[2]])
@@ -411,9 +416,11 @@ ROD_VIS_SEG  = 10
 # the gripper AND its reaction force is applied back onto the arm -> the rod can DRAG
 # the (compliant) follower, like a real cable. End nodes get a small lumped mass so
 # the stiff spring stays stable. Set ROD_COUPLE_K=0 for the old one-way (no force back).
-ROD_COUPLE_K  = float(os.environ.get("ROD_COUPLE_K", 400.0))   # N/m  end<->gripper spring
-ROD_COUPLE_C  = float(os.environ.get("ROD_COUPLE_C", 3.0))     # N.s/m damping
-ROD_END_MASS  = float(os.environ.get("ROD_END_MASS", 0.02))    # kg   lumped end mass
+ROD_COUPLE_K  = float(os.environ.get("ROD_COUPLE_K", 2500.0))  # N/m stiff -> rod tracks the
+                                                               # gripper tightly (no spring stretch)
+ROD_COUPLE_C  = float(os.environ.get("ROD_COUPLE_C", 10.0))    # N.s/m damping
+ROD_END_MASS  = float(os.environ.get("ROD_END_MASS", 0.03))    # kg lumped end mass (stable spring)
+ROD_FORCE_MAX = float(os.environ.get("ROD_FORCE_MAX", 120.0))  # N cap on the force on the arm
 
 
 def _build_warp_rod_class():
@@ -514,7 +521,12 @@ def _build_warp_rod_class():
             else:                                   # one-way: ends rigidly pinned
                 invm[0] = invm[-1] = 0.0
             self.invm = wp.array(invm, dtype=float, device=dev)
-            seg = CABLE_LENGTH / (self.n - 1)
+            # Rest segment = the ACTUAL initial gripper gap / (n-1), so the inextensible
+            # rod is exactly TAUT between the two grippers -- it reaches both ends (no
+            # "stretched" gap) yet transmits the pull. (Not CABLE_LENGTH, which would
+            # leave slack and look like it falls short.)
+            gap = float(np.linalg.norm(np.asarray(end_b) - np.asarray(end_a)))
+            seg = gap / (self.n - 1)
             self.rest = wp.array(np.full(self.n - 1, seg, dtype=np.float32),
                                  dtype=float, device=dev)
             self._build_tube(stage)
@@ -874,8 +886,9 @@ def main():
                 warp_P = warp_rod.step(tcp_l, tcp_f, RENDER_DT)
                 mid = warp_P[mid_index]
                 # clamp the reaction forces (avoid a transient spike destabilising the arm)
-                warp_force_l[:] = np.clip(warp_rod.force_a, -40.0, 40.0)
-                warp_force_f[:] = np.clip(warp_rod.force_b, -40.0, 40.0)
+                _fm = ROD_FORCE_MAX
+                warp_force_l[:] = np.clip(warp_rod.force_a, -_fm, _fm)
+                warp_force_f[:] = np.clip(warp_rod.force_b, -_fm, _fm)
                 ok = bool(np.all(np.isfinite(warp_P))) and float(np.max(np.abs(warp_P))) < 50.0
                 speed = 0.0 if ok else 1.0e9
                 threshold = 1.0

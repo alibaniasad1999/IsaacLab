@@ -118,11 +118,12 @@ def predict(x: wp.array(dtype=wp.vec3), x_prev: wp.array(dtype=wp.vec3),
 
 
 @wp.kernel
-def set_pins(x: wp.array(dtype=wp.vec3), anchor: wp.vec3, handle: wp.vec3, n: int):
+def set_pins(x: wp.array(dtype=wp.vec3), anchor: wp.vec3, handle: wp.vec3,
+             n: int, pin_end: int):
     i = wp.tid()
     if i == 0:
         x[0] = anchor
-    if i == n - 1:
+    if i == n - 1 and pin_end == 1:
         x[n - 1] = handle
 
 
@@ -203,13 +204,15 @@ xprev_wp  = wp.zeros(N, dtype=wp.vec3, device=DEVICE)
 v_wp      = wp.zeros(N, dtype=wp.vec3, device=DEVICE)
 m_node    = TOTAL_MASS / N
 invm_np   = np.full(N, 1.0 / m_node, dtype=np.float32)
-invm_np[0] = 0.0          # steady end pinned
-invm_np[-1] = 0.0         # moving end pinned (to the handle)
+invm_np[0] = 0.0          # steady (anchor) end always pinned
+invm_np[-1] = 0.0         # moving end pinned to the handle...
+if RECORD:
+    invm_np[-1] = 1.0 / m_node   # ...EXCEPT when recording: free it so it FALLS on the sphere
 invm_wp   = wp.array(invm_np, dtype=float, device=DEVICE)
 rest_wp   = wp.array(np.full(N - 1, _seg_rest, dtype=np.float32), dtype=float, device=DEVICE)
 
 
-def step_rod(anchor, handle):
+def step_rod(anchor, handle, pin_end=1):
     a = wp.vec3(float(anchor[0]), float(anchor[1]), float(anchor[2]))
     h = wp.vec3(float(handle[0]), float(handle[1]), float(handle[2]))
     sc = wp.vec3(float(SPHERE_POS[0]), float(SPHERE_POS[1]), float(SPHERE_POS[2]))
@@ -218,9 +221,9 @@ def step_rod(anchor, handle):
     a_b = BEND_COMP / (dt * dt)
     for _ in range(SUBSTEPS):
         wp.launch(predict, dim=N, inputs=[x_wp, xprev_wp, v_wp, invm_wp, GRAVITY, dt], device=DEVICE)
-        wp.launch(set_pins, dim=N, inputs=[x_wp, a, h, N], device=DEVICE)
+        wp.launch(set_pins, dim=N, inputs=[x_wp, a, h, N, pin_end], device=DEVICE)
         wp.launch(solve_rod, dim=1, inputs=[x_wp, invm_wp, rest_wp, N, ITERS, a_s, a_b], device=DEVICE)
-        wp.launch(set_pins, dim=N, inputs=[x_wp, a, h, N], device=DEVICE)
+        wp.launch(set_pins, dim=N, inputs=[x_wp, a, h, N, pin_end], device=DEVICE)
         wp.launch(finalize, dim=N, inputs=[x_wp, xprev_wp, v_wp, invm_wp, dt, VEL_DAMPING], device=DEVICE)
         wp.launch(collide, dim=N, inputs=[x_wp, v_wp, invm_wp, GROUND_Z, VIS_RADIUS,
                                           sc, SPHERE_R, 1 if USE_SPHERE else 0], device=DEVICE)
@@ -247,10 +250,9 @@ def cube(name, pos, size, color):
 anchor_path, anchor_cube = cube("anchor", ANCHOR_POS, 0.05, [0.2, 0.4, 0.8])     # steady
 handle_path, handle_cube = cube("handle", HANDLE_POS, 0.06, [0.95, 0.55, 0.05])  # MOVE THIS
 if RECORD:
-    # Cable-only recording: both ends stay fixed, hide the orange handle cube, and
-    # let the cable SAG/fall onto the sphere (no moving cube to detach from).
+    # Cable-only recording: keep the blue ANCHOR end fixed (and visible), DELETE the
+    # orange handle cube (hide it) and free that end so the cable FALLS onto the sphere.
     UsdGeom.Imageable(stage.GetPrimAtPath(handle_path)).MakeInvisible()
-    UsdGeom.Imageable(stage.GetPrimAtPath(anchor_path)).MakeInvisible()
 
 if USE_SPHERE:
     sph = UsdGeom.Sphere.Define(stage, "/World/obstacle")
@@ -360,11 +362,11 @@ try:
             handle_cube.set_world_pose(hp, None)
             handle = hp
         elif RECORD:
-            handle = HANDLE_POS          # fixed 2nd anchor -> cable sags onto the sphere
+            handle = HANDLE_POS          # ignored (end is free in record mode)
         else:
             handle = handle_world_pos()  # interactive: follow the mouse-moved cube
 
-        P = step_rod(ANCHOR_POS, handle)
+        P = step_rod(ANCHOR_POS, handle, pin_end=(0 if RECORD else 1))
         update_tube(P)
         world.step(render=(not HEADLESS))
         step += 1

@@ -10,14 +10,14 @@
   "hex_resolution": null,
   "rod_nodes": null,
   "traj_amplitude_rad": 0.5,
-  "traj_frequency_hz": 0.8,
+  "traj_frequency_hz": 0.6,
   "settle_seconds": 1.0,
   "physics_dt_s": 0.004166666666666667,
   "total_sim_time_s": 10.00416666666642,
-  "wall_clock_s": 120.0154555310146,
-  "realtime_factor": 0.08335731945858528,
+  "wall_clock_s": 290.0079962470045,
+  "realtime_factor": 0.03449617526458033,
   "stable": true,
   "instability_at_s": null,
-  "max_speed_metric": 49868.28254105706,
+  "max_speed_metric": 413571.65150763205,
   "csv_path": "/home/ali/Documents/me/IsaacLab/scripts/cable_simulation/slides_output/approach1_robot/trajectory.csv"
 }

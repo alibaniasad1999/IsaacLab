@@ -11,9 +11,10 @@ swing would just bend it. Set CABLE_TRAJ_JOINT=panda_joint1 / CABLE_FOLLOWER_SOF
 for the old hold-rigid behaviour.)
 
 Under a hard pull the methods separate clearly: the rigid inextensible CAPSULE drags
-the follower far (~17 cm) while the cable barely stretches (~5 cm); the FEM soft body
-and the spring-coupled WARP rod mostly STRETCH (20-35%) and drag little (~3-4 cm).
-So only the capsule truly transmits force like a real cable. Runs with all three:
+the follower far (~17 cm) while barely stretching (~5 cm) -- true force transmission.
+The FEM soft body stretches (~20-35%) and drags little. The WARP rod is ONE-WAY by
+default (a clean thin cable that follows the grippers but exerts no force back; set
+ROD_COUPLE_K>0 for an experimental two-way spring coupling). Runs with all three:
 
   CABLE_METHOD=capsule      rigid capsule chain + D6 joints      (cable.py)
   CABLE_METHOD=deformable   FEM deformable cylinder, fattened    (cable_fem.py)
@@ -416,10 +417,13 @@ ROD_VIS_SEG  = 10
 # the gripper AND its reaction force is applied back onto the arm -> the rod can DRAG
 # the (compliant) follower, like a real cable. End nodes get a small lumped mass so
 # the stiff spring stays stable. Set ROD_COUPLE_K=0 for the old one-way (no force back).
-ROD_COUPLE_K  = float(os.environ.get("ROD_COUPLE_K", 2500.0))  # N/m stiff -> rod tracks the
-                                                               # gripper tightly (no spring stretch)
+# DEFAULT 0 = ONE-WAY: the rod ends are pinned to the grippers and it sags between them
+# as a clean thin cable (it follows the arms but exerts no force back). This looked
+# best. Set ROD_COUPLE_K>0 to instead spring-couple it two-way (the rod can then drag
+# the follower a little, but the spring visibly stretches under a hard pull).
+ROD_COUPLE_K  = float(os.environ.get("ROD_COUPLE_K", 0.0))     # N/m  0 = one-way (clean)
 ROD_COUPLE_C  = float(os.environ.get("ROD_COUPLE_C", 10.0))    # N.s/m damping
-ROD_END_MASS  = float(os.environ.get("ROD_END_MASS", 0.03))    # kg lumped end mass (stable spring)
+ROD_END_MASS  = float(os.environ.get("ROD_END_MASS", 0.03))    # kg lumped end mass
 ROD_FORCE_MAX = float(os.environ.get("ROD_FORCE_MAX", 120.0))  # N cap on the force on the arm
 
 
@@ -521,12 +525,13 @@ def _build_warp_rod_class():
             else:                                   # one-way: ends rigidly pinned
                 invm[0] = invm[-1] = 0.0
             self.invm = wp.array(invm, dtype=float, device=dev)
-            # Rest segment = the ACTUAL initial gripper gap / (n-1), so the inextensible
-            # rod is exactly TAUT between the two grippers -- it reaches both ends (no
-            # "stretched" gap) yet transmits the pull. (Not CABLE_LENGTH, which would
-            # leave slack and look like it falls short.)
-            gap = float(np.linalg.norm(np.asarray(end_b) - np.asarray(end_a)))
-            seg = gap / (self.n - 1)
+            # One-way (clean): rest = full cable length -> it sags between the grippers
+            # like a real hanging cable. Two-way: rest = the actual gripper gap so the
+            # inextensible rod is taut and can transmit the pull.
+            if ROD_COUPLE_K > 0.0:
+                seg = float(np.linalg.norm(np.asarray(end_b) - np.asarray(end_a))) / (self.n - 1)
+            else:
+                seg = CABLE_LENGTH / (self.n - 1)
             self.rest = wp.array(np.full(self.n - 1, seg, dtype=np.float32),
                                  dtype=float, device=dev)
             self._build_tube(stage)
@@ -725,10 +730,12 @@ def main():
 
     hand_idx = leader.body_names.index("panda_hand")
     # Which joint the leader oscillates. joint2 (shoulder) moves the gripper
-    # toward/away -> PULLS the cable axially -> drags the compliant follower
-    # (best transmission). joint1 (yaw) only swings it sideways -> the flexible
-    # cable mostly just bends. Default joint2 for the "drag the other arm" demo.
-    TRAJ_JOINT = os.environ.get("CABLE_TRAJ_JOINT", "panda_joint2")
+    # toward/away -> PULLS the cable axially -> drags the follower (transmission).
+    # joint1 (yaw) swings it SIDEWAYS -> the cable just bends/swings (no axial pull,
+    # so it can't over-stretch). Capsule uses joint2 to show force transmission; the
+    # one-way warp uses joint1 so its thin cable swings cleanly without stretching.
+    _def_joint = "panda_joint1" if CABLE_METHOD == "warp" else "panda_joint2"
+    TRAJ_JOINT = os.environ.get("CABLE_TRAJ_JOINT", _def_joint)
     j1_idx   = leader.joint_names.index(TRAJ_JOINT)
 
     def tcp_of(robot):

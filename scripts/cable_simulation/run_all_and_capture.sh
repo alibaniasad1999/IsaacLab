@@ -10,9 +10,15 @@
 #
 # Requirements: env_isaaclab conda env, a DISPLAY (GUI render is needed to record),
 # ffmpeg, pdflatex.  Run from anywhere:
-#     bash scripts/cable_simulation/run_all_and_capture.sh
+#     bash scripts/cable_simulation/run_all_and_capture.sh            # all 6
+#     bash scripts/cable_simulation/run_all_and_capture.sh approach2  # just method 2 (both scenes)
+#     bash scripts/cable_simulation/run_all_and_capture.sh approach2_robot   # just one clip
+#     bash scripts/cable_simulation/run_all_and_capture.sh warp       # any substring of the folder name
+# The optional argument FILTERS which sims run (matches the output-folder name);
+# the slides are still rebuilt with whatever frames exist.
 # =============================================================================
 set -u
+FILTER="${1:-}"     # optional: only run sims whose folder name contains this
 
 # ---- paths ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -71,10 +77,19 @@ run_one () {
   fi
 }
 
+_ran=0
 for job in "${JOBS[@]}"; do
   IFS='|' read -r folder script extra <<< "$job"
+  if [ -n "$FILTER" ] && [[ "$folder" != *"$FILTER"* ]]; then
+    continue        # skip sims that don't match the filter
+  fi
   run_one "$folder" "$script" "$extra"
+  _ran=$((_ran+1))
 done
+if [ "$_ran" -eq 0 ]; then
+  echo "!! no sims matched filter '$FILTER'. Folders: approach1_cable_only approach1_robot"
+  echo "   approach2_cable_only approach2_robot approach3_cable_only approach3_robot"
+fi
 
 # ---- build the slides ----
 echo "============================================================"

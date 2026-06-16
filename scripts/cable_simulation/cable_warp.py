@@ -62,7 +62,9 @@ N            = int(os.environ.get("ROD_NODES", 48))          # rod nodes
 LENGTH       = TOTAL_CABLE_LENGTH                             # rest length (m), inextensible
 VIS_RADIUS   = float(os.environ.get("ROD_RADIUS", 5e-3))     # visual + collision radius (m)
 TOTAL_MASS   = CABLE_MASS                                     # kg (physical cable mass)
-BEND_COMP    = float(os.environ.get("ROD_BEND_COMP", 1.0e-3))  # bending compliance (small=stiff)
+BEND_COMP    = float(os.environ.get("ROD_BEND_COMP", 4.0e-3))  # bending compliance: bigger =
+                                                               # floppier (swings/drapes like a
+                                                               # rope, not a stiff stick)
 STRETCH_COMP = float(os.environ.get("ROD_STRETCH_COMP", 1.0e-9))  # ~0 => inextensible
 SUBSTEPS     = int(os.environ.get("ROD_SUBSTEPS", 16))
 ITERS        = int(os.environ.get("ROD_ITERS", 12))
@@ -366,6 +368,8 @@ try:
         else:
             handle = handle_world_pos()  # interactive: follow the mouse-moved cube
 
+        # Record mode: one fixed (blue) anchor, free far end FALLS and drapes on the
+        # sphere. The rod is floppy (BEND_COMP) so it falls/curls like a real rope.
         P = step_rod(ANCHOR_POS, handle, pin_end=(0 if RECORD else 1))
         update_tube(P)
         world.step(render=(not HEADLESS))

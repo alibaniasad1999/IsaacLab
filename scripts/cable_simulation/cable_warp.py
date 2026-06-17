@@ -72,11 +72,13 @@ ITERS        = int(os.environ.get("ROD_ITERS", 12))
 VEL_DAMPING  = float(os.environ.get("ROD_DAMPING", 0.02))
 GRAVITY      = float(os.environ.get("ROD_GRAVITY", -9.81))
 
-ANCHOR_POS = np.array([-0.4, 0.0, 1.5])    # STEADY (held) end
-HANDLE_POS = np.array([+0.4, 0.0, 1.5])    # free end (falls onto the sphere)
-USE_SPHERE   = os.environ.get("ROD_OBSTACLE", "1") == "1"
-SPHERE_POS   = np.array([0.0, 0.0, 1.05])
-SPHERE_R     = float(os.environ.get("ROD_SPHERE_R", 0.12))
+ANCHOR_POS = np.array([-0.4, 0.0, 1.15])   # STEADY (held/connected) end -- like the FEM:
+HANDLE_POS = np.array([+0.4, 0.0, 1.15])   # the cable lies over the bar, free end hangs down
+# Obstacle is a horizontal CYLINDER (along Y), like the FEM demo: the cable DRAPES
+# over it and the free end hangs down the far side.
+USE_CYLINDER = os.environ.get("ROD_OBSTACLE", "1") == "1"
+CYL_POS      = np.array([0.0, 0.0, 1.0])   # under the cable's middle
+CYL_R        = float(os.environ.get("ROD_CYL_R", 0.10))
 GROUND_Z     = 0.0
 
 RENDER_DT  = 1.0 / 60.0
@@ -177,7 +179,9 @@ def finalize(x: wp.array(dtype=wp.vec3), x_prev: wp.array(dtype=wp.vec3),
 @wp.kernel
 def collide(x: wp.array(dtype=wp.vec3), v: wp.array(dtype=wp.vec3),
             invm: wp.array(dtype=float), ground_z: float, rad: float,
-            sc: wp.vec3, sr: float, use_sphere: int):
+            cyl: wp.vec3, cylr: float, use_cyl: int):
+    # cyl = cylinder centre; the cylinder axis runs along Y, so a node is pushed
+    # out RADIALLY in the x-z plane (it drapes OVER the bar, like the FEM cylinder).
     i = wp.tid()
     if invm[i] <= 0.0:
         return
@@ -186,14 +190,15 @@ def collide(x: wp.array(dtype=wp.vec3), v: wp.array(dtype=wp.vec3),
     if pz < ground_z + rad:
         pz = ground_z + rad
         v[i] = wp.vec3(v[i][0], v[i][1], 0.0)
-    p = wp.vec3(px, py, pz)
-    if use_sphere == 1:
-        d = p - sc
-        dist = wp.length(d)
-        mind = sr + rad
-        if dist < mind and dist > 1.0e-9:
-            p = sc + d / dist * mind
-    x[i] = p
+    if use_cyl == 1:
+        dx = px - cyl[0]
+        dz = pz - cyl[2]
+        dxz = wp.sqrt(dx * dx + dz * dz)
+        mind = cylr + rad
+        if dxz < mind and dxz > 1.0e-9:
+            px = cyl[0] + dx / dxz * mind
+            pz = cyl[2] + dz / dxz * mind
+    x[i] = wp.vec3(px, py, pz)
 
 
 # ===============================================================
@@ -217,7 +222,7 @@ rest_wp   = wp.array(np.full(N - 1, _seg_rest, dtype=np.float32), dtype=float, d
 def step_rod(anchor, handle, pin_end=1):
     a = wp.vec3(float(anchor[0]), float(anchor[1]), float(anchor[2]))
     h = wp.vec3(float(handle[0]), float(handle[1]), float(handle[2]))
-    sc = wp.vec3(float(SPHERE_POS[0]), float(SPHERE_POS[1]), float(SPHERE_POS[2]))
+    sc = wp.vec3(float(CYL_POS[0]), float(CYL_POS[1]), float(CYL_POS[2]))
     dt = RENDER_DT / SUBSTEPS
     a_s = STRETCH_COMP / (dt * dt)
     a_b = BEND_COMP / (dt * dt)
@@ -228,7 +233,7 @@ def step_rod(anchor, handle, pin_end=1):
         wp.launch(set_pins, dim=N, inputs=[x_wp, a, h, N, pin_end], device=DEVICE)
         wp.launch(finalize, dim=N, inputs=[x_wp, xprev_wp, v_wp, invm_wp, dt, VEL_DAMPING], device=DEVICE)
         wp.launch(collide, dim=N, inputs=[x_wp, v_wp, invm_wp, GROUND_Z, VIS_RADIUS,
-                                          sc, SPHERE_R, 1 if USE_SPHERE else 0], device=DEVICE)
+                                          sc, CYL_R, 1 if USE_CYLINDER else 0], device=DEVICE)
     return x_wp.numpy()
 
 
@@ -256,11 +261,13 @@ if RECORD:
     # orange handle cube (hide it) and free that end so the cable FALLS onto the sphere.
     UsdGeom.Imageable(stage.GetPrimAtPath(handle_path)).MakeInvisible()
 
-if USE_SPHERE:
-    sph = UsdGeom.Sphere.Define(stage, "/World/obstacle")
-    sph.CreateRadiusAttr(SPHERE_R)
-    sph.CreateDisplayColorAttr([Gf.Vec3f(0.3, 0.7, 0.3)])
-    UsdGeom.XformCommonAPI(sph).SetTranslate(Gf.Vec3d(*[float(v) for v in SPHERE_POS]))
+if USE_CYLINDER:
+    cyl = UsdGeom.Cylinder.Define(stage, "/World/obstacle")
+    cyl.CreateRadiusAttr(CYL_R)
+    cyl.CreateHeightAttr(0.5)            # length along its axis
+    cyl.CreateAxisAttr("Y")             # horizontal bar (cable drapes OVER it)
+    cyl.CreateDisplayColorAttr([Gf.Vec3f(0.3, 0.7, 0.3)])
+    UsdGeom.XformCommonAPI(cyl).SetTranslate(Gf.Vec3d(*[float(v) for v in CYL_POS]))
 
 # ---- thin tube mesh for the rod (updated every frame) ----
 tube = UsdGeom.Mesh.Define(stage, "/World/cable")

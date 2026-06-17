@@ -45,13 +45,13 @@
           deformable-object manipulation are common, unsolved robotics tasks.
     \item \textbf{The challenge:} Isaac Sim has \emph{no native 1-D deformable
           (rod/cable) body} -- only rigid bodies and volumetric FEM soft bodies.
-    \item \textbf{The goal:} find the cable model that is realistic \emph{and}
-          fast \emph{and} robot-coupled enough for \textbf{RL-based cable
-          manipulation} with domain randomization.
+    \item \textbf{This study:} implement three candidate cable models and lay out
+          \emph{what each can and cannot do} -- their capabilities and limitations --
+          as a basis for choosing one later for cable manipulation.
   \end{itemize}
   \vfill
-  {\footnotesize We evaluate three approaches, each in two scenarios
-   (free cable, and cable held by a Franka arm).}
+  {\footnotesize Three approaches, each in two scenarios (free cable, and cable held
+   by a Franka arm). This talk presents trade-offs and limitations -- it does not pick a winner.}
 \end{frame}
 
 % ---------- 3. Overview ----------
@@ -153,75 +153,102 @@
   \end{center}
 \end{frame}
 
-% ---------- 10. Comparison table ----------
-\begin{frame}{Comparison}
+% ---------- 10. Trade-offs (neutral, no ranking) ----------
+\begin{frame}{Trade-offs at a glance}
   \centering\renewcommand{\arraystretch}{1.25}
   \begin{tabular}{lccc}
     \toprule
     \textbf{Criteria} & \textbf{D6 capsule} & \textbf{Cosserat (Warp)} & \textbf{FEM} \\
     \midrule
-    Realism             & Good (beam bending) & \textbf{Excellent} (1-D rod) & Fair (jelly/stretch) \\
-    Stability           & \textbf{Excellent}  & \textbf{Excellent}          & Fair \\
-    Compute cost        & Low (real-time)     & Low ($\sim$1.4$\times$ RT)  & High ($<$0.2$\times$ RT) \\
-    Ease of setup       & Moderate            & Moderate (custom Warp)      & \textbf{Easy} (built-in) \\
-    RL readiness        & \textbf{High}       & Medium                      & Low \\
-    Force transmission  & \textbf{Strong} ($\sim$17\,cm) & None (one-way)     & Weak (stretches) \\
-    Domain randomization& \textbf{Easy}       & Easy                        & Harder \\
+    Cable realism       & beam-bending       & 1-D rod (thinnest)      & volumetric (jelly/stretch) \\
+    Stretches?          & no (rigid links)   & no (inextensible)       & yes ($\sim$10--50\%) \\
+    Thinness            & true 1.5\,mm       & true (any radius)       & $\geq$12\,mm (faked thin) \\
+    Compute cost        & low                & low ($\sim$1.4$\times$ RT) & high ($<$0.2$\times$ RT) \\
+    Robot force coupling& two-way            & one-way (or spring)     & two-way (rough) \\
+    Collision           & exact capsules     & exact (coded prims)     & approximate tets \\
+    Setup / code        & many joints        & custom Warp solver      & built-in \\
     \bottomrule
   \end{tabular}
   \vfill
-  {\footnotesize RT = real time. ``Two-way'' = the robot feels the cable's reaction force.}
+  {\footnotesize RT = real time. These are \emph{trade-offs} -- no single method wins
+   on every row; the right one depends on the priority.}
 \end{frame}
 
-% ---------- 11. Pros / cons ----------
-\begin{frame}{Pros and cons}
+% ---------- 11. Pros & cons (no ranking) ----------
+\begin{frame}{Pros and cons (each is a trade-off --- no single ``best'')}
   \footnotesize
   \textbf{1. Capsule chain (D6 joints)}
-  \begin{itemize}\itemsep1pt
-    \item[\textcolor{green!50!black}{+}] Stable over a wide parameter range; physically grounded; real-time; \textbf{two-way} robot coupling; easy domain randomization.
-    \item[\textcolor{red!70!black}{--}] No axial elasticity (links can't stretch); needs many links for a smooth look; free twist DOF needs damping.
+  \begin{itemize}\itemsep0pt
+    \item[\textcolor{green!50!black}{+}] Stable; physically grounded; real-time; two-way force coupling; easy to randomize.
+    \item[\textcolor{red!70!black}{--}] Piecewise-rigid (no axial give); many bodies; needs a heavy solver to stay inextensible.
   \end{itemize}
   \textbf{2. Cosserat rod in Warp (OGC)}
-  \begin{itemize}\itemsep1pt
-    \item[\textcolor{green!50!black}{+}] Most faithful cable: thin, inextensible, no jelly; exact, penetration-free collision; GPU-fast; cleanest-looking cable.
-    \item[\textcolor{red!70!black}{--}] \textbf{One-way} robot coupling (follows the grippers but exerts no force back); custom Warp code (not a native Isaac body); no volumetric contact.
+  \begin{itemize}\itemsep0pt
+    \item[\textcolor{green!50!black}{+}] Thinnest, cleanest cable; inextensible; no jelly; exact node-vs-primitive collision; GPU-fast.
+    \item[\textcolor{red!70!black}{--}] Separate (non-PhysX) sim; only artificial robot coupling; hand-coded collision; custom solver.
   \end{itemize}
   \textbf{3. FEM deformable}
+  \begin{itemize}\itemsep0pt
+    \item[\textcolor{green!50!black}{+}] True volumetric soft body; native to Isaac Sim; two-way; handles squashing/draping.
+    \item[\textcolor{red!70!black}{--}] Fat, stretches, jelly, rigid at the joint, rough collision, slow.
+  \end{itemize}
+\end{frame}
+
+% ---------- 12. Limitations: Capsule ----------
+\begin{frame}{Limitations --- Capsule chain (D6 joints)}
+  \footnotesize
+  \begin{itemize}\itemsep2pt
+    \item \textbf{Piecewise-rigid:} links cannot stretch \emph{at all} -- it is a chain
+          of rigid bodies, not a continuum; bending is a discrete per-joint spring.
+    \item \textbf{Many bodies:} needs 60--200 links + joints for a smooth look
+          $\Rightarrow$ many rigid bodies and constraints to simulate.
+    \item \textbf{Solver cost vs.\ rigidity:} staying inextensible under load needs
+          high position-iteration counts ($\approx$180); too few $\Rightarrow$ it
+          stretches, too many $\Rightarrow$ it goes unstable.
+    \item \textbf{Numerical twist:} the free twist DOF spins up unless explicitly damped.
+    \item \textbf{Tuning-sensitive:} link mass / joint stiffness / damping / timestep
+          must be balanced (mass-ratio \& dt limits) or the chain diverges.
+    \item \textbf{Approximate bending:} torsional springs from beam theory, not a true rod.
+  \end{itemize}
+\end{frame}
+
+% ---------- 13. Limitations: Warp rod ----------
+\begin{frame}{Limitations --- Cosserat rod (Warp / OGC)}
+  \footnotesize
+  \begin{itemize}\itemsep2pt
+    \item \textbf{Not a native physics body:} it is a \emph{separate} Warp simulation
+          $\Rightarrow$ it does not interact with PhysX bodies through the engine
+          (no automatic contact with robots or objects).
+    \item \textbf{Artificial robot coupling:} either kinematic (\textbf{one-way} --
+          follows the gripper, no force back) or a hand-tuned spring (two-way, but then
+          it visibly \emph{stretches}); no clean physical two-way coupling.
+    \item \textbf{Hand-coded collision only:} node-vs-primitive (ground, sphere) that
+          you write; no general mesh contact, no self-collision unless coded.
+    \item \textbf{Implementation burden:} you must write \& maintain the XPBD solver
+          kernels -- not off-the-shelf; every new obstacle needs custom contact code.
+  \end{itemize}
+\end{frame}
+
+% ---------- 14. Limitations: FEM ----------
+\begin{frame}{Limitations --- FEM deformable}
+  \footnotesize
   \begin{itemize}\itemsep1pt
-    \item[\textcolor{green!50!black}{+}] Most realistic volumetric deformation; handles complex geometry; built into Isaac Sim; two-way.
-    \item[\textcolor{red!70!black}{--}] Expensive; must be fattened (can't be thin); stretches; rough simplified collision; rigid clamp at the attachment; slow for RL.
+    \item \textbf{Cannot be thin:} voxeliser needs $\geq$3 hexes across the diameter and
+          cooking caps resolution $\Rightarrow$ thinnest $\approx$12\,mm (real cable
+          1.5\,mm, $8\times$ too thick); only \emph{rendered} thin.
+    \item \textbf{Stretches:} one isotropic $E$ ties bending ($\propto E r^4$) to axial
+          ($\propto E r^2$) -- exact bending $\Rightarrow$ axially soft ($\sim$50\%
+          stretch); firm enough not to stretch $\Rightarrow$ bending 20--30$\times$ too stiff.
+    \item \textbf{``Jelly'':} low-resolution soft body + near-incompressible $\nu$
+          $\Rightarrow$ volumetric locking / wobble.
+    \item \textbf{Rigid at the connection:} attachment \emph{welds a region} of vertices
+          (clamped-beam boundary) $\Rightarrow$ straight/stiff near the joint, not a pin.
+    \item \textbf{Rough collision:} simplified, re-meshed coarse collision tets
+          $\Rightarrow$ imprecise, can clip thin obstacles; self-collision off by default.
+    \item \textbf{Expensive:} GPU FEM runs $<$0.2$\times$ real-time.
   \end{itemize}
-\end{frame}
-
-% ---------- 12. Recommendation ----------
-\begin{frame}{Recommendation}
-  \begin{block}{For RL-based cable manipulation: the \textbf{capsule chain (D6 joints)}}
-  \begin{itemize}\footnotesize
-    \item Only model that is simultaneously \textbf{stable, real-time, and two-way
-          robot-coupled} -- the robot actually feels the cable, which RL needs.
-    \item Physically grounded (beam theory) and \textbf{easy to domain-randomize}
-          (per-joint stiffness/damping/mass).
-  \end{itemize}
-  \end{block}
-  \begin{itemize}\footnotesize
-    \item Use the \textbf{Warp Cosserat rod} as a high-fidelity reference / for
-          visualization and contact-rich studies (penetration-free, exact collision).
-    \item Use \textbf{FEM} only when a genuine \emph{volumetric} soft body
-          (squashing/draping) is required -- not for fast RL.
-  \end{itemize}
-\end{frame}
-
-% ---------- 13. Next steps ----------
-\begin{frame}{Next steps}
-  \begin{itemize}
-    \item \textbf{RL training} of a cable-manipulation policy on the capsule model.
-    \item \textbf{Domain randomization}: cable stiffness, damping, mass, length,
-          friction; robot dynamics.
-    \item \textbf{Two-way coupling} study: how the cable's reaction shapes the policy.
-    \item \textbf{Physical validation} against a real TPU cable.
-    \item Before arriving at Waterloo: finalize the env + reward and a first
-          sim-to-sim transfer between the three models.
-  \end{itemize}
+  {\scriptsize Full derivations: \texttt{why\_fem\_cant\_be\_thin.py},
+   \texttt{README\_fem\_attachment\_collision.md}.}
 \end{frame}
 
 % ---------- 14. Thanks ----------

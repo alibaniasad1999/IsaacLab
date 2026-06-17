@@ -1,7 +1,7 @@
 % =============================================================================
 % Flexible Cable Simulation in NVIDIA Isaac Sim -- progress slides
-% Build:  pdflatex cable_slides.tex  (run twice).  Madrid theme = always compiles.
-% Images come from slides_output/{capsule,cosserat_warp,fem}/{cable_only,robot}/frame.png
+% Build:  pdflatex cable_slides.tex  (run twice), from this slides/ directory.
+% Images come from ../slides_output/{capsule,cosserat_warp,fem}/{cable_only,robot}/frame.png
 % (produced by run_all_and_capture.sh); a missing frame shows a labelled placeholder.
 % =============================================================================
 \documentclass[aspectratio=169]{beamer}
@@ -68,11 +68,10 @@
 \useoutertheme{miniframes}
 % ---------------------------------------------------------------------------
 
-% This is the SINGLE source .tex; build it from its own directory with:
-%   pdflatex --output-directory=slides_output/slides cable_slides.tex   (run twice)
-% Frame images are referenced as slides_output/<approachX>/frame.png, i.e. relative
-% to THIS file's directory (scripts/cable_simulation/). run_all_and_capture.sh does
-% exactly that. \graphicspath also allows a build from inside slides_output/slides/.
+% This is the SINGLE source .tex; it lives in scripts/cable_simulation/slides/.
+% Build it from this directory (run_all_and_capture.sh does this for you):
+%   cd scripts/cable_simulation/slides && pdflatex cable_slides.tex   (run twice)
+% Frames are referenced as ../slides_output/<method>/<scene>/frame.png (one level up).
 \graphicspath{{./}{../}}
 
 % Show a frame.png if it exists, else a neat placeholder box (keeps it compiling).
@@ -98,7 +97,10 @@
 \begin{document}
 
 % ---------- 1. Title ----------
-\begin{frame}[plain]\titlepage\end{frame}
+\section{}
+\begin{frame}
+  \titlepage
+\end{frame}
 
 % ---------- Outline ----------
 \begin{frame}{Outline}\tableofcontents\end{frame}
@@ -157,13 +159,13 @@
         \item Modes: hanging-kick and both-ends-fixed.
       \end{itemize}
     \column{0.54\textwidth}
-      \simframe{slides_output/capsule/cable_only/frame.png}{Video: capsule/cable\_only/video.mp4 (shared folder)}
+      \simframe{../slides_output/capsule/cable_only/frame.png}{Video: 1\_capsule\_cable.mp4 (shared Drive folder)}
   \end{columns}
 \end{frame}
 
 % ---------- 5. Approach 1 -- robot ----------
 \begin{frame}{Approach 1 --- With robot}
-  \simframe{slides_output/capsule/robot/frame.png}{Video: capsule/robot/video.mp4 (shared folder)}
+  \simframe{../slides_output/capsule/robot/frame.png}{Video: 1\_capsule\_robot.mp4 (shared Drive folder)}
   \begin{center}\footnotesize
   Inextensible (rigid joints): a hard pull \textbf{drags the second arm $\sim$17\,cm}
   while the cable barely stretches ($\sim$5\,cm) $\Rightarrow$ \textbf{true force transmission}.
@@ -183,13 +185,13 @@
               node-vs-primitive collision.
       \end{itemize}
     \column{0.54\textwidth}
-      \simframe{slides_output/cosserat_warp/cable_only/frame.png}{Video: cosserat\_warp/cable\_only/video.mp4 (shared folder)}
+      \simframe{../slides_output/cosserat_warp/cable_only/frame.png}{Video: 2\_cosserat\_cable.mp4 (shared Drive folder)}
   \end{columns}
 \end{frame}
 
 % ---------- 7. Approach 2 -- robot ----------
 \begin{frame}{Approach 2 --- With robot}
-  \simframe{slides_output/cosserat_warp/robot/frame.png}{Video: cosserat\_warp/robot/video.mp4 (shared folder)}
+  \simframe{../slides_output/cosserat_warp/robot/frame.png}{Video: 2\_cosserat\_robot.mp4 (shared Drive folder)}
   \begin{center}\footnotesize
   End nodes \textbf{pinned} to the grippers: the thin rod follows the arms and sags
   cleanly between them (best-looking cable). \textbf{One-way} -- it follows but exerts
@@ -210,13 +212,13 @@
         \item Rendered thin via a swept tube on its centreline.
       \end{itemize}
     \column{0.54\textwidth}
-      \simframe{slides_output/fem/cable_only/frame.png}{Video: fem/cable\_only/video.mp4 (shared folder)}
+      \simframe{../slides_output/fem/cable_only/frame.png}{Video: 3\_fem\_cable.mp4 (shared Drive folder)}
   \end{columns}
 \end{frame}
 
 % ---------- 9. Approach 3 -- robot ----------
 \begin{frame}{Approach 3 --- With robot}
-  \simframe{slides_output/fem/robot/frame.png}{Video: fem/robot/video.mp4 (shared folder)}
+  \simframe{../slides_output/fem/robot/frame.png}{Video: 3\_fem\_robot.mp4 (shared Drive folder)}
   \begin{center}\footnotesize
   Region-weld attachment. Being a soft body it \textbf{stretches a lot} under a hard
   pull ($\sim$20--35\%) and drags the follower little $\Rightarrow$ poor force transmission.

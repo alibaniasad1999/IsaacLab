@@ -22,8 +22,8 @@ FILTER="${1:-}"     # optional: only run sims whose folder name contains this
 
 # ---- paths ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT="$SCRIPT_DIR/slides_output"
-SLIDES="$OUT/slides"
+OUT="$SCRIPT_DIR/slides_output"   # captured sim media (frames, csv, json, videos/)
+SLIDES="$SCRIPT_DIR/slides"       # the LaTeX deck (cable_slides.tex) + its built PDF
 PER_SIM_SECONDS=10            # length of each recorded clip
 JOB_TIMEOUT=900              # hard cap per sim (startup + run + shutdown), seconds
 
@@ -37,20 +37,25 @@ mkdir -p "$SLIDES"
 # Common env that makes every script render a window, record, and stop at 10 s.
 COMMON="CABLE_HEADLESS=0 CABLE_RECORD=1 CABLE_INTERACTIVE=0 CABLE_MAX_TIME=$PER_SIM_SECONDS"
 
-# ---- the 6 jobs:  out_folder | python script | extra env ----
+# ---- the 6 jobs:  out_folder | python script | extra env | video_name ----
+# frame.png + logs stay in the per-method out_folder (the slides read frame.png
+# from there); the final clip is renamed to <video_name>.mp4 and collected into
+# slides_output/videos/ so all six are in one flat folder, ready to upload.
 JOBS=(
-  "capsule/cable_only|cable.py|CABLE_MODE=hanging_kick"
-  "capsule/robot|cable_two_robots.py|CABLE_METHOD=capsule"
-  "cosserat_warp/cable_only|cable_warp.py|ROD_OBSTACLE=1"
-  "cosserat_warp/robot|cable_two_robots.py|CABLE_METHOD=warp"
-  "fem/cable_only|cable_fem_contact.py|"
-  "fem/robot|cable_two_robots.py|CABLE_METHOD=deformable"
+  "capsule/cable_only|cable.py|CABLE_MODE=hanging_kick|1_capsule_cable"
+  "capsule/robot|cable_two_robots.py|CABLE_METHOD=capsule|1_capsule_robot"
+  "cosserat_warp/cable_only|cable_warp.py|ROD_OBSTACLE=1|2_cosserat_cable"
+  "cosserat_warp/robot|cable_two_robots.py|CABLE_METHOD=warp|2_cosserat_robot"
+  "fem/cable_only|cable_fem_contact.py||3_fem_cable"
+  "fem/robot|cable_two_robots.py|CABLE_METHOD=deformable|3_fem_robot"
 )
 
+VIDEOS="$OUT/videos"   # flat folder collecting all six final clips
+
 run_one () {
-  local folder="$1" script="$2" extra="$3"
+  local folder="$1" script="$2" extra="$3" vidname="$4"
   local dir="$OUT/$folder"
-  mkdir -p "$dir"
+  mkdir -p "$dir" "$VIDEOS"
   echo "============================================================"
   echo ">>> $folder   ($script  $extra)"
   echo "============================================================"
@@ -60,18 +65,17 @@ run_one () {
       > "$dir/run.log" 2>&1
   echo "    (exit $?) log: $dir/run.log"
 
-  # Find whatever .mp4 the script produced and normalise it to video.mp4.
+  # Find whatever .mp4 the script produced.
   local mp4
   mp4="$(find "$dir" -maxdepth 1 -name '*.mp4' -printf '%T@ %p\n' 2>/dev/null \
          | sort -nr | head -1 | cut -d' ' -f2-)"
   if [ -n "$mp4" ] && [ -f "$mp4" ]; then
-    [ "$(basename "$mp4")" != "video.mp4" ] && mv -f "$mp4" "$dir/video.mp4"
     # Grab a key frame at t=5 s (fall back to the last frame for short clips).
-    ffmpeg -y -ss 5 -i "$dir/video.mp4" -frames:v 1 "$dir/frame.png" \
-        >/dev/null 2>&1 \
-      || ffmpeg -y -sseof -1 -i "$dir/video.mp4" -frames:v 1 "$dir/frame.png" \
-        >/dev/null 2>&1
-    echo "    OK -> $dir/video.mp4  +  frame.png"
+    ffmpeg -y -ss 5 -i "$mp4" -frames:v 1 "$dir/frame.png" >/dev/null 2>&1 \
+      || ffmpeg -y -sseof -1 -i "$mp4" -frames:v 1 "$dir/frame.png" >/dev/null 2>&1
+    # Collect the clip into the flat videos/ folder under a clear name.
+    mv -f "$mp4" "$VIDEOS/$vidname.mp4"
+    echo "    OK -> $VIDEOS/$vidname.mp4  +  $dir/frame.png"
   else
     echo "    !! no .mp4 produced (see run.log). Slides will show a placeholder."
   fi
@@ -79,11 +83,11 @@ run_one () {
 
 _ran=0
 for job in "${JOBS[@]}"; do
-  IFS='|' read -r folder script extra <<< "$job"
+  IFS='|' read -r folder script extra vidname <<< "$job"
   if [ -n "$FILTER" ] && [[ "$folder" != *"$FILTER"* ]]; then
     continue        # skip sims that don't match the filter
   fi
-  run_one "$folder" "$script" "$extra"
+  run_one "$folder" "$script" "$extra" "$vidname"
   _ran=$((_ran+1))
 done
 if [ "$_ran" -eq 0 ]; then
@@ -95,15 +99,14 @@ fi
 echo "============================================================"
 echo ">>> Building slides"
 echo "============================================================"
-# Single source of truth: cable_slides.tex lives next to this script. Build it
-# in place (image paths resolve via \graphicspath{{slides_output/}}) and drop the
-# PDF + aux files into $SLIDES. No copy of the .tex is made.
-cd "$SCRIPT_DIR"
-pdflatex -interaction=nonstopmode --output-directory="$SLIDES" cable_slides.tex >/dev/null 2>&1
-pdflatex -interaction=nonstopmode --output-directory="$SLIDES" cable_slides.tex >/dev/null 2>&1
+# Single source of truth: slides/cable_slides.tex. Build it in place (frames
+# resolve via ../slides_output/<method>/...); PDF + aux land in slides/.
+cd "$SLIDES"
+pdflatex -interaction=nonstopmode cable_slides.tex >/dev/null 2>&1
+pdflatex -interaction=nonstopmode cable_slides.tex >/dev/null 2>&1
 
 echo
 echo "DONE."
 echo "  Slides : $SLIDES/cable_slides.pdf"
-echo "  Videos : $OUT/{capsule,cosserat_warp,fem}/*/video.mp4"
+echo "  Videos : $VIDEOS/  (all six clips, ready to upload)"
 echo "  Frames : $OUT/{capsule,cosserat_warp,fem}/*/frame.png"

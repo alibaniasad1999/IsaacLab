@@ -17,9 +17,9 @@ report/*.nav
 report/*.snm
 report/*.toc
 
-# LaTeX build artifacts for the slides (cable_slides.tex)
-# The .tex is the single source; the PDF in slides_output/slides/ is the build
-# output we keep. Everything else LaTeX spits out is scratch -- ignore it.
+# LaTeX build artifacts for the slides (slides/cable_slides.tex)
+# The .tex is the single source; slides/cable_slides.pdf is the build output we
+# keep. Everything else LaTeX spits out is scratch -- ignore it.
 cable_slides.aux
 cable_slides.log
 cable_slides.out
@@ -29,7 +29,7 @@ cable_slides.synctex.gz
 cable_slides.nav
 cable_slides.snm
 cable_slides.toc
-# Stray build of the slides in the source dir (real output lives in slides_output/slides/)
+# Stray build of the slides at the base dir (real output lives in slides/)
 /cable_slides.pdf
 
 # Python cache

@@ -95,10 +95,12 @@ fi
 echo "============================================================"
 echo ">>> Building slides"
 echo "============================================================"
-cp -f "$SCRIPT_DIR/cable_slides.tex" "$SLIDES/cable_slides.tex"
-cd "$SLIDES"
-pdflatex -interaction=nonstopmode cable_slides.tex >/dev/null 2>&1
-pdflatex -interaction=nonstopmode cable_slides.tex >/dev/null 2>&1
+# Single source of truth: cable_slides.tex lives next to this script. Build it
+# in place (image paths resolve via \graphicspath{{slides_output/}}) and drop the
+# PDF + aux files into $SLIDES. No copy of the .tex is made.
+cd "$SCRIPT_DIR"
+pdflatex -interaction=nonstopmode --output-directory="$SLIDES" cable_slides.tex >/dev/null 2>&1
+pdflatex -interaction=nonstopmode --output-directory="$SLIDES" cable_slides.tex >/dev/null 2>&1
 
 echo
 echo "DONE."

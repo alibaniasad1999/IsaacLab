@@ -13,6 +13,13 @@
 \usepackage{booktabs}
 \usepackage{tikz}
 
+% This is the SINGLE source .tex; build it from its own directory with:
+%   pdflatex --output-directory=slides_output/slides cable_slides.tex   (run twice)
+% Frame images are referenced as slides_output/<approachX>/frame.png, i.e. relative
+% to THIS file's directory (scripts/cable_simulation/). run_all_and_capture.sh does
+% exactly that. \graphicspath also allows a build from inside slides_output/slides/.
+\graphicspath{{./}{../}}
+
 % Show a frame.png if it exists, else a neat placeholder box (keeps it compiling).
 \newcommand{\simframe}[2]{%   #1 = path, #2 = caption under the image
   \begin{center}
@@ -84,17 +91,17 @@
         \item Rigid capsules linked by \textbf{D6 joints}; translations locked
               (inextensible), bending springs $k=EI/L$ from beam theory.
         \item PhysX \textbf{TGS} solver, up to 200 links, 240\,Hz.
-        \item Reproduces the \textbf{Govoni et al.\ 2025} stability sweep.
+        \item Reproduces the \textbf{Govoni et al.\ 2025} stability sweep [2].
         \item Modes: hanging-kick and both-ends-fixed.
       \end{itemize}
     \column{0.54\textwidth}
-      \simframe{../approach1_cable_only/frame.png}{Video: approach1\_cable\_only/video.mp4 (shared folder)}
+      \simframe{slides_output/approach1_cable_only/frame.png}{Video: approach1\_cable\_only/video.mp4 (shared folder)}
   \end{columns}
 \end{frame}
 
 % ---------- 5. Approach 1 -- robot ----------
 \begin{frame}{Approach 1 --- With robot}
-  \simframe{../approach1_robot/frame.png}{Video: approach1\_robot/video.mp4 (shared folder)}
+  \simframe{slides_output/approach1_robot/frame.png}{Video: approach1\_robot/video.mp4 (shared folder)}
   \begin{center}\footnotesize
   Inextensible (rigid joints): a hard pull \textbf{drags the second arm $\sim$17\,cm}
   while the cable barely stretches ($\sim$5\,cm) $\Rightarrow$ \textbf{true force transmission}.
@@ -108,19 +115,19 @@
       \begin{itemize}\footnotesize
         \item 1-D \textbf{Cosserat / XPBD} elastic rod: inextensible stretch +
               bending stiffness + gravity, solved on the GPU in \textbf{Warp}.
-        \item Idea from the \textbf{OGC} paper (Chen et al., SIGGRAPH 2025):
+        \item Idea from the \textbf{OGC} paper (Chen et al., SIGGRAPH 2025) [1]:
               penetration-free contact for cloth \& rods.
         \item Truly \textbf{thin} (no FEM fattening); \textbf{exact}
               node-vs-primitive collision.
       \end{itemize}
     \column{0.54\textwidth}
-      \simframe{../approach2_cable_only/frame.png}{Video: approach2\_cable\_only/video.mp4 (shared folder)}
+      \simframe{slides_output/approach2_cable_only/frame.png}{Video: approach2\_cable\_only/video.mp4 (shared folder)}
   \end{columns}
 \end{frame}
 
 % ---------- 7. Approach 2 -- robot ----------
 \begin{frame}{Approach 2 --- With robot}
-  \simframe{../approach2_robot/frame.png}{Video: approach2\_robot/video.mp4 (shared folder)}
+  \simframe{slides_output/approach2_robot/frame.png}{Video: approach2\_robot/video.mp4 (shared folder)}
   \begin{center}\footnotesize
   End nodes \textbf{pinned} to the grippers: the thin rod follows the arms and sags
   cleanly between them (best-looking cable). \textbf{One-way} -- it follows but exerts
@@ -133,20 +140,21 @@
   \begin{columns}[c]
     \column{0.46\textwidth}
       \begin{itemize}\footnotesize
-        \item Isaac Sim's built-in \textbf{volumetric} (tetrahedral) FEM soft body.
+        \item Isaac Sim's built-in \textbf{volumetric} (tetrahedral) FEM soft body
+              (NVIDIA Omniverse volume-deformable workflow, [3]).
         \item TPU material: $E=40$\,MPa, $\nu=0.48$, $\rho=1150$\,kg/m$^3$.
         \item Rod \textbf{fattened} to 12\,mm and $E$ rescaled so it bends/weighs
               like the real 1.5\,mm cable (voxeliser needs $\geq3$ hexes across).
         \item Rendered thin via a swept tube on its centreline.
       \end{itemize}
     \column{0.54\textwidth}
-      \simframe{../approach3_cable_only/frame.png}{Video: approach3\_cable\_only/video.mp4 (shared folder)}
+      \simframe{slides_output/approach3_cable_only/frame.png}{Video: approach3\_cable\_only/video.mp4 (shared folder)}
   \end{columns}
 \end{frame}
 
 % ---------- 9. Approach 3 -- robot ----------
 \begin{frame}{Approach 3 --- With robot}
-  \simframe{../approach3_robot/frame.png}{Video: approach3\_robot/video.mp4 (shared folder)}
+  \simframe{slides_output/approach3_robot/frame.png}{Video: approach3\_robot/video.mp4 (shared folder)}
   \begin{center}\footnotesize
   Region-weld attachment. Being a soft body it \textbf{stretches a lot} under a hard
   pull ($\sim$20--35\%) and drags the follower little $\Rightarrow$ poor force transmission.
@@ -251,7 +259,28 @@
    \texttt{README\_fem\_attachment\_collision.md}.}
 \end{frame}
 
-% ---------- 14. Thanks ----------
+% ---------- 15. References ----------
+\begin{frame}{References}
+  \footnotesize
+  \begin{itemize}\itemsep4pt
+    \item[{[1]}] A. H. Chen, J. Hsu, Z. Liu, M. Macklin, Y. Yang, and C. Yuksel.
+          \textbf{Offset Geometric Contact.}
+          \emph{ACM Transactions on Graphics} (SIGGRAPH 2025), 44(4), 2025.
+          DOI: 10.1145/3731205. \\
+          {\scriptsize Source for Approach~2 (Cosserat / position-based rod in NVIDIA Warp).
+           \texttt{graphics.cs.utah.edu/research/projects/ogc}}
+    \item[{[2]}] A. Govoni, N. Zubair, S. Soprani, and G. Palli.
+          \textbf{Performance Analysis of a Mass--Spring--Damper Deformable Linear
+          Object Model in Robotic Simulation Frameworks.}
+          European Robotics Forum (ERF), 2025. arXiv:2504.13659. \\
+          {\scriptsize Reference for the Approach~1 DLO / stability behaviour.}
+    \item[{[3]}] NVIDIA. \textbf{Omniverse Physics Extension --- Volume Deformables (Overview).}
+          Omniverse tutorial video. \texttt{youtube.com/watch?v=focL232tb8U} \\
+          {\scriptsize Source for Approach~3 (Isaac Sim volumetric FEM soft body).}
+  \end{itemize}
+\end{frame}
+
+% ---------- 16. Thanks ----------
 \begin{frame}[plain]
   \centering\vfill
   {\Large Thank you}\\[1em]

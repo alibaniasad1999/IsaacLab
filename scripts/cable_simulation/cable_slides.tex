@@ -1,17 +1,72 @@
 % =============================================================================
 % Flexible Cable Simulation in NVIDIA Isaac Sim -- progress slides
 % Build:  pdflatex cable_slides.tex  (run twice).  Madrid theme = always compiles.
-% Images are read from ../approachX_*/frame.png (produced by run_all_and_capture.sh);
-% if a frame is missing the slide shows a labelled placeholder, so this always builds.
+% Images come from slides_output/{capsule,cosserat_warp,fem}/{cable_only,robot}/frame.png
+% (produced by run_all_and_capture.sh); a missing frame shows a labelled placeholder.
 % =============================================================================
 \documentclass[aspectratio=169]{beamer}
+% ===========================================================================
+% Theme ported from the master-thesis defense deck (thesis_defense/presentation.tex)
+% so this progress deck matches it visually: Madrid + miniframes + circles,
+% green/orange scheme, Times fonts.
+% ===========================================================================
 \usetheme{Madrid}
-\usecolortheme{whale}                 % dark navy/blue -- clean and professional
 \setbeamertemplate{navigation symbols}{}
 \setbeamertemplate{caption}[numbered]
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{tikz}
+
+% ---- thesis-defense colour scheme -----------------------------------------
+% (names kept from the thesis file; myBlue is actually a green, myTeal an orange)
+\definecolor{myBlue}{RGB}{50, 148, 109}
+\definecolor{myTeal}{RGB}{229, 61, 0}
+
+\setbeamercolor*{structure}{bg=myBlue,fg=myBlue}
+\setbeamercolor*{palette primary}{use=structure,fg=white,bg=structure.fg}
+\setbeamercolor*{palette secondary}{use=structure,fg=myBlue,bg=white}
+\setbeamercolor*{palette tertiary}{use=structure,fg=white,bg=myBlue}
+\setbeamercolor{frametitle}{bg=myBlue,fg=white}
+\setbeamercolor*{titlelike}{parent=palette primary}
+\setbeamercolor{section in head/foot}{fg=myTeal, bg=white}
+\setbeamercolor{item projected}{bg=myTeal}
+\setbeamertemplate{enumerate items}{bg=myTeal}
+\setbeamercolor{itemize item}{fg=myTeal}
+\setbeamercolor{itemize subitem}{fg=myTeal}
+\setbeamercolor{button}{bg=myTeal}
+\setbeamercolor{section in toc}{fg=black}
+\setbeamercolor{subsection in toc}{fg=black}
+\setbeamercolor{block title}{bg=myTeal, fg=white}
+\setbeamercolor{block body}{bg=myTeal!20}
+
+% ---- fonts (Times, matching the thesis) -----------------------------------
+\usefonttheme{professionalfonts}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage{newtxtext}
+  \usepackage{newtxmath}
+\else
+  \usepackage{fontspec}
+  \setmainfont{Times New Roman}
+  \setsansfont{Times New Roman}
+  \setmonofont{Courier New}
+\fi
+\usepackage{amsmath}
+
+% ---- extra palette (also from the thesis preamble; used by +/- marks) ------
+\colorlet{myred}{red!80!black}
+\colorlet{myblue}{blue!80!black}
+\colorlet{mygreen}{green!60!black}
+\colorlet{mydarkred}{myred!40!black}
+\colorlet{mydarkblue}{myblue!40!black}
+\colorlet{mydarkgreen}{mygreen!40!black}
+\colorlet{myorange}{orange!80!black}
+\colorlet{myviolet}{blue!50!red!60}
+
+\useinnertheme{circles}
+\useoutertheme{miniframes}
+% ---------------------------------------------------------------------------
 
 % This is the SINGLE source .tex; build it from its own directory with:
 %   pdflatex --output-directory=slides_output/slides cable_slides.tex   (run twice)
@@ -44,6 +99,11 @@
 
 % ---------- 1. Title ----------
 \begin{frame}[plain]\titlepage\end{frame}
+
+% ---------- Outline ----------
+\begin{frame}{Outline}\tableofcontents\end{frame}
+
+\section{Overview}
 
 % ---------- 2. Motivation ----------
 \begin{frame}{Motivation}
@@ -83,6 +143,8 @@
   \end{center}
 \end{frame}
 
+\section{Three approaches}
+
 % ---------- 4. Approach 1 -- cable only ----------
 \begin{frame}{Approach 1 --- Capsule chain (D6 joints)}
   \begin{columns}[c]
@@ -95,13 +157,13 @@
         \item Modes: hanging-kick and both-ends-fixed.
       \end{itemize}
     \column{0.54\textwidth}
-      \simframe{slides_output/approach1_cable_only/frame.png}{Video: approach1\_cable\_only/video.mp4 (shared folder)}
+      \simframe{slides_output/capsule/cable_only/frame.png}{Video: capsule/cable\_only/video.mp4 (shared folder)}
   \end{columns}
 \end{frame}
 
 % ---------- 5. Approach 1 -- robot ----------
 \begin{frame}{Approach 1 --- With robot}
-  \simframe{slides_output/approach1_robot/frame.png}{Video: approach1\_robot/video.mp4 (shared folder)}
+  \simframe{slides_output/capsule/robot/frame.png}{Video: capsule/robot/video.mp4 (shared folder)}
   \begin{center}\footnotesize
   Inextensible (rigid joints): a hard pull \textbf{drags the second arm $\sim$17\,cm}
   while the cable barely stretches ($\sim$5\,cm) $\Rightarrow$ \textbf{true force transmission}.
@@ -121,13 +183,13 @@
               node-vs-primitive collision.
       \end{itemize}
     \column{0.54\textwidth}
-      \simframe{slides_output/approach2_cable_only/frame.png}{Video: approach2\_cable\_only/video.mp4 (shared folder)}
+      \simframe{slides_output/cosserat_warp/cable_only/frame.png}{Video: cosserat\_warp/cable\_only/video.mp4 (shared folder)}
   \end{columns}
 \end{frame}
 
 % ---------- 7. Approach 2 -- robot ----------
 \begin{frame}{Approach 2 --- With robot}
-  \simframe{slides_output/approach2_robot/frame.png}{Video: approach2\_robot/video.mp4 (shared folder)}
+  \simframe{slides_output/cosserat_warp/robot/frame.png}{Video: cosserat\_warp/robot/video.mp4 (shared folder)}
   \begin{center}\footnotesize
   End nodes \textbf{pinned} to the grippers: the thin rod follows the arms and sags
   cleanly between them (best-looking cable). \textbf{One-way} -- it follows but exerts
@@ -148,18 +210,20 @@
         \item Rendered thin via a swept tube on its centreline.
       \end{itemize}
     \column{0.54\textwidth}
-      \simframe{slides_output/approach3_cable_only/frame.png}{Video: approach3\_cable\_only/video.mp4 (shared folder)}
+      \simframe{slides_output/fem/cable_only/frame.png}{Video: fem/cable\_only/video.mp4 (shared folder)}
   \end{columns}
 \end{frame}
 
 % ---------- 9. Approach 3 -- robot ----------
 \begin{frame}{Approach 3 --- With robot}
-  \simframe{slides_output/approach3_robot/frame.png}{Video: approach3\_robot/video.mp4 (shared folder)}
+  \simframe{slides_output/fem/robot/frame.png}{Video: fem/robot/video.mp4 (shared folder)}
   \begin{center}\footnotesize
   Region-weld attachment. Being a soft body it \textbf{stretches a lot} under a hard
   pull ($\sim$20--35\%) and drags the follower little $\Rightarrow$ poor force transmission.
   \end{center}
 \end{frame}
+
+\section{Comparison}
 
 % ---------- 10. Trade-offs (neutral, no ranking) ----------
 \begin{frame}{Trade-offs at a glance}
@@ -187,20 +251,22 @@
   \footnotesize
   \textbf{1. Capsule chain (D6 joints)}
   \begin{itemize}\itemsep0pt
-    \item[\textcolor{green!50!black}{+}] Stable; physically grounded; real-time; two-way force coupling; easy to randomize.
-    \item[\textcolor{red!70!black}{--}] Piecewise-rigid (no axial give); many bodies; needs a heavy solver to stay inextensible.
+    \item[\textcolor{mygreen}{+}] Stable; physically grounded; real-time; two-way force coupling; easy to randomize.
+    \item[\textcolor{myred}{--}] Piecewise-rigid (no axial give); many bodies; needs a heavy solver to stay inextensible.
   \end{itemize}
   \textbf{2. Cosserat rod in Warp (OGC)}
   \begin{itemize}\itemsep0pt
-    \item[\textcolor{green!50!black}{+}] Thinnest, cleanest cable; inextensible; no jelly; exact node-vs-primitive collision; GPU-fast.
-    \item[\textcolor{red!70!black}{--}] Separate (non-PhysX) sim; only artificial robot coupling; hand-coded collision; custom solver.
+    \item[\textcolor{mygreen}{+}] Thinnest, cleanest cable; inextensible; no jelly; exact node-vs-primitive collision; GPU-fast.
+    \item[\textcolor{myred}{--}] Separate (non-PhysX) sim; only artificial robot coupling; hand-coded collision; custom solver.
   \end{itemize}
   \textbf{3. FEM deformable}
   \begin{itemize}\itemsep0pt
-    \item[\textcolor{green!50!black}{+}] True volumetric soft body; native to Isaac Sim; two-way; handles squashing/draping.
-    \item[\textcolor{red!70!black}{--}] Fat, stretches, jelly, rigid at the joint, rough collision, slow.
+    \item[\textcolor{mygreen}{+}] True volumetric soft body; native to Isaac Sim; two-way; handles squashing/draping.
+    \item[\textcolor{myred}{--}] Fat, stretches, jelly, rigid at the joint, rough collision, slow.
   \end{itemize}
 \end{frame}
+
+\section{Limitations}
 
 % ---------- 12. Limitations: Capsule ----------
 \begin{frame}{Limitations --- Capsule chain (D6 joints)}
@@ -259,6 +325,8 @@
    \texttt{README\_fem\_attachment\_collision.md}.}
 \end{frame}
 
+\section{References}
+
 % ---------- 15. References ----------
 \begin{frame}{References}
   \footnotesize
@@ -283,8 +351,7 @@
 % ---------- 16. Thanks ----------
 \begin{frame}[plain]
   \centering\vfill
-  {\Large Thank you}\\[1em]
-  {\large Questions?}\\[2em]
+  {\Large Thank you}\\[3em]
   {\footnotesize Ali Baniasad --- Supervisor: Prof.\ Soo Jeon, University of Waterloo}
   \vfill
 \end{frame}

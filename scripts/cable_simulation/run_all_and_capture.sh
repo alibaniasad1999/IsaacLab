@@ -11,9 +11,9 @@
 # Requirements: env_isaaclab conda env, a DISPLAY (GUI render is needed to record),
 # ffmpeg, pdflatex.  Run from anywhere:
 #     bash scripts/cable_simulation/run_all_and_capture.sh            # all 6
-#     bash scripts/cable_simulation/run_all_and_capture.sh approach2  # just method 2 (both scenes)
-#     bash scripts/cable_simulation/run_all_and_capture.sh approach2_robot   # just one clip
-#     bash scripts/cable_simulation/run_all_and_capture.sh warp       # any substring of the folder name
+#     bash scripts/cable_simulation/run_all_and_capture.sh cosserat   # just that method (both scenes)
+#     bash scripts/cable_simulation/run_all_and_capture.sh capsule/robot   # just one clip
+#     bash scripts/cable_simulation/run_all_and_capture.sh fem        # any substring of the folder name
 # The optional argument FILTERS which sims run (matches the output-folder name);
 # the slides are still rebuilt with whatever frames exist.
 # =============================================================================
@@ -39,12 +39,12 @@ COMMON="CABLE_HEADLESS=0 CABLE_RECORD=1 CABLE_INTERACTIVE=0 CABLE_MAX_TIME=$PER_
 
 # ---- the 6 jobs:  out_folder | python script | extra env ----
 JOBS=(
-  "approach1_cable_only|cable.py|CABLE_MODE=hanging_kick"
-  "approach1_robot|cable_two_robots.py|CABLE_METHOD=capsule"
-  "approach2_cable_only|cable_warp.py|ROD_OBSTACLE=1"
-  "approach2_robot|cable_two_robots.py|CABLE_METHOD=warp"
-  "approach3_cable_only|cable_fem_contact.py|"
-  "approach3_robot|cable_two_robots.py|CABLE_METHOD=deformable"
+  "capsule/cable_only|cable.py|CABLE_MODE=hanging_kick"
+  "capsule/robot|cable_two_robots.py|CABLE_METHOD=capsule"
+  "cosserat_warp/cable_only|cable_warp.py|ROD_OBSTACLE=1"
+  "cosserat_warp/robot|cable_two_robots.py|CABLE_METHOD=warp"
+  "fem/cable_only|cable_fem_contact.py|"
+  "fem/robot|cable_two_robots.py|CABLE_METHOD=deformable"
 )
 
 run_one () {
@@ -87,8 +87,8 @@ for job in "${JOBS[@]}"; do
   _ran=$((_ran+1))
 done
 if [ "$_ran" -eq 0 ]; then
-  echo "!! no sims matched filter '$FILTER'. Folders: approach1_cable_only approach1_robot"
-  echo "   approach2_cable_only approach2_robot approach3_cable_only approach3_robot"
+  echo "!! no sims matched filter '$FILTER'. Folders: capsule/cable_only capsule/robot"
+  echo "   cosserat_warp/cable_only cosserat_warp/robot fem/cable_only fem/robot"
 fi
 
 # ---- build the slides ----
@@ -105,5 +105,5 @@ pdflatex -interaction=nonstopmode --output-directory="$SLIDES" cable_slides.tex 
 echo
 echo "DONE."
 echo "  Slides : $SLIDES/cable_slides.pdf"
-echo "  Videos : $OUT/approach*/video.mp4"
-echo "  Frames : $OUT/approach*/frame.png"
+echo "  Videos : $OUT/{capsule,cosserat_warp,fem}/*/video.mp4"
+echo "  Frames : $OUT/{capsule,cosserat_warp,fem}/*/frame.png"

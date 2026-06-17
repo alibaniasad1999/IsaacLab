@@ -62,18 +62,18 @@ N            = int(os.environ.get("ROD_NODES", 48))          # rod nodes
 LENGTH       = TOTAL_CABLE_LENGTH                             # rest length (m), inextensible
 VIS_RADIUS   = float(os.environ.get("ROD_RADIUS", 5e-3))     # visual + collision radius (m)
 TOTAL_MASS   = CABLE_MASS                                     # kg (physical cable mass)
-BEND_COMP    = float(os.environ.get("ROD_BEND_COMP", 4.0e-3))  # bending compliance: bigger =
-                                                               # floppier (swings/drapes like a
-                                                               # rope, not a stiff stick)
+BEND_COMP    = float(os.environ.get("ROD_BEND_COMP", 3.0e-2))  # bending compliance: bigger =
+                                                               # floppier. High here so the free
+                                                               # end DROOPS down to the sphere
+                                                               # (a real cable), not a stiff stick
 STRETCH_COMP = float(os.environ.get("ROD_STRETCH_COMP", 1.0e-9))  # ~0 => inextensible
 SUBSTEPS     = int(os.environ.get("ROD_SUBSTEPS", 16))
 ITERS        = int(os.environ.get("ROD_ITERS", 12))
 VEL_DAMPING  = float(os.environ.get("ROD_DAMPING", 0.02))
 GRAVITY      = float(os.environ.get("ROD_GRAVITY", -9.81))
 
-ANCHOR_POS = np.array([-0.4, 0.0, 1.5])    # STEADY end
-HANDLE_POS = np.array([+0.4, 0.0, 1.5])    # MOVING end (start)
-
+ANCHOR_POS = np.array([-0.4, 0.0, 1.5])    # STEADY (held) end
+HANDLE_POS = np.array([+0.4, 0.0, 1.5])    # free end (falls onto the sphere)
 USE_SPHERE   = os.environ.get("ROD_OBSTACLE", "1") == "1"
 SPHERE_POS   = np.array([0.0, 0.0, 1.05])
 SPHERE_R     = float(os.environ.get("ROD_SPHERE_R", 0.12))

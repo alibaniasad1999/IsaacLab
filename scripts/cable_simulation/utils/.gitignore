@@ -1,0 +1,20 @@
+# SAM model weights (large; auto-downloaded on first run into models/)
+models/
+*.pt
+*.pth
+
+# Input media (large photos / videos) and generated results
+media/
+
+# Generated outputs (named after the source image/video)
+*_cable_mask.png
+*_cable_overlay.png
+*_profile.png
+*_result.png
+*_result.mp4
+*_result.gif
+*.csv
+
+# Python cache
+__pycache__/
+*.pyc

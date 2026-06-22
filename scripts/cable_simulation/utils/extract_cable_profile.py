@@ -390,6 +390,9 @@ def rotate_interactive(fig, ax, img, start_deg: int = 0):
 
     final = rotate_image(img, state["deg"])
     log.info("locked rotation at %d deg", state["deg"])
+    # expose the chosen angle so callers (video) can rotate every frame the
+    # same way; the photo caller simply ignores this attribute.
+    rotate_interactive.last_deg = int(state["deg"])
     # leave the rotated image shown for the clicking steps.
     ax.clear()
     ax.imshow(final)
@@ -821,12 +824,15 @@ def cmd_video(args):
     if not ok:
         raise SystemExit("Could not read the first frame.")
     frame0 = cv2.cvtColor(frame0_bgr, cv2.COLOR_BGR2RGB)
-    H, W = frame0.shape[:2]
 
-    # --- FRAME 1: everything in ONE matplotlib window, exactly like 'photo'
+    # --- ROTATE frame 1 (live, like photo). The chosen angle is applied to
+    # EVERY frame below, so the whole video -- pixels AND the x/z frame -- is
+    # rotated consistently (e.g. make a vertical hang lie horizontal).
     fig, ax = plt.subplots(figsize=(11, 8))
-    ax.imshow(frame0)
-    ax.set_axis_off()
+    frame0 = rotate_interactive(fig, ax, frame0, start_deg=args.rotate)
+    rot_deg = getattr(rotate_interactive, "last_deg", int(args.rotate))
+    H, W = frame0.shape[:2]
+    log.info("video rotated %d deg to match frame 1.", rot_deg)
 
     # STEP 1: scale reference (two clicks + a typed distance), same as photo.
     log.info("=== FRAME 1, STEP 1/2  SCALE REFERENCE ===")
@@ -900,7 +906,9 @@ def cmd_video(args):
         if not ok:
             break
         if idx % max(1, args.stride) == 0:
-            process(cv2.cvtColor(fr, cv2.COLOR_BGR2RGB), idx)
+            rgb_fr = cv2.cvtColor(fr, cv2.COLOR_BGR2RGB)
+            rgb_fr = rotate_image(rgb_fr, rot_deg)   # same rotation as frame 1
+            process(rgb_fr, idx)
             _progress(idx, total or idx, "frames")
         idx += 1
     cap.release()
@@ -941,14 +949,22 @@ def _save_gif(frames, path, fps):
 # Output naming  -- results are named after the input image/video.
 # ===========================================================================
 def _out_paths(input_path, out_override=None):
-    """Derive result paths from the INPUT file name (next to it).
+    """Derive result paths (CSV + plot).
 
-    e.g. media/IMG_0501.JPG -> media/IMG_0501_profile.csv / _profile.png
-    `out_override` (the --out flag) wins for the CSV if given.
+    If --out is given, both the CSV and the plot go THERE (the plot next to the
+    CSV), so you can direct all results into a results/ folder. Otherwise they
+    land next to the input image.
+    e.g. --out results/IMG_0501/profile.csv -> .../profile.png alongside it.
     """
-    base = os.path.splitext(input_path)[0]
-    csv_path = out_override or (base + "_profile.csv")
-    plot_path = base + "_profile.png"
+    if out_override:
+        csv_path = out_override
+        plot_path = os.path.splitext(out_override)[0] + ".png"
+    else:
+        base = os.path.splitext(input_path)[0]
+        csv_path = base + "_profile.csv"
+        plot_path = base + "_profile.png"
+    # make sure the destination folder exists.
+    os.makedirs(os.path.dirname(os.path.abspath(csv_path)), exist_ok=True)
     return csv_path, plot_path
 
 
@@ -1114,6 +1130,9 @@ def build_parser():
         "video",
         help="click the cable in frame 1; SAM tracks it -> CSV + results video")
     pv.add_argument("--video", required=True)
+    pv.add_argument("--rotate", type=int, default=0, choices=[0, 90, 180, 270],
+                    help="STARTING rotation for frame 1 (you can fine-tune live "
+                         "with 'r'/'e'); applied to the WHOLE video")
     pv.add_argument("--out", default=None,
                     help="CSV path (default: <video>_profile.csv next to video)")
     pv.add_argument("--scale-m", type=float, default=None,

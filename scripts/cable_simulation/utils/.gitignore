@@ -3,14 +3,16 @@ models/
 *.pt
 *.pth
 
-# Input media (large photos / videos) and generated results
+# Input media (large photos / videos) -- inputs only live here
 media/
 
-# Generated outputs (named after the source image/video)
+# Workflow results (run_image.sh writes results/<image-name>/...)
+results/
+
+# Stray generated outputs (if a tool is run directly, not via the workflow)
 *_cable_mask.png
 *_cable_overlay.png
 *_profile.png
-*_result.png
 *_result.mp4
 *_result.gif
 *.csv

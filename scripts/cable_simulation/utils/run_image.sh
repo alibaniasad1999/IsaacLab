@@ -1,26 +1,22 @@
 #!/usr/bin/env bash
 # ============================================================================
-# run_image.sh  --  one-shot cable workflow for a single IMAGE.
+# run_image.sh  --  extract a cable's 2-D profile from a single IMAGE.
 #
-#   segment the cable (SAM)  ->  metric profile (CSV + plot)  ->  identify the
-#   cable material (Gamma / EI / Young's modulus).
+#   segment the cable (SAM)  ->  metric profile (CSV + plot)
+#
+# The profile (x_m, z_m, in metres) is saved for later analysis. NOTE: a single
+# STATIC hanging shape does NOT identify material stiffness (a stiff and a
+# floppy cable of the same size hang almost identically) -- the profile is kept
+# for other methods (e.g. dynamics / oscillation). See README.md.
 #
 # All results go into  results/<image-name>/  so media/ stays inputs-only.
 #
 # USAGE
-#   ./run_image.sh <image> [mass_g] [radius_mm] [length_m]
-#
-#   <image>     path to the photo (e.g. media/IMG_0501.JPG)
-#   mass_g      cable mass in grams   (optional -> full identification: E, EI)
-#   radius_mm   cable radius in mm    (optional -> Young's modulus E)
-#   length_m    true cable length    (OPTIONAL -- by default the length is
-#                                     MEASURED from the image; only pass this to
-#                                     override the image-measured length)
+#   ./run_image.sh <image>
 #
 # EXAMPLES
-#   ./run_image.sh media/IMG_0501.JPG                 # length auto from image
-#   ./run_image.sh media/IMG_0501.JPG 8.1 1.5         # + mass & radius -> E
-#   ./run_image.sh media/IMG_0501.JPG 8.1 1.5 1.0     # also force length=1.0 m
+#   ./run_image.sh media/IMG_0501.JPG
+#   ROTATE=90 SMOOTH=2 ./run_image.sh media/IMG_0501.JPG
 # ============================================================================
 set -euo pipefail
 
@@ -29,13 +25,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PY="${PYTHON:-python}"            # override with PYTHON=/path/to/python
 
 IMAGE="${1:-}"
-MASS_G="${2:-}"
-RADIUS_MM="${3:-}"
-LENGTH_M="${4:-}"          # optional override; default = length measured from image
-
 if [[ -z "$IMAGE" ]]; then
-  echo "usage: $0 <image> [mass_g] [radius_mm] [length_m]" >&2
-  echo "  (length is measured from the image unless you pass length_m)" >&2
+  echo "usage: $0 <image>" >&2
   exit 1
 fi
 if [[ ! -f "$IMAGE" ]]; then
@@ -54,9 +45,7 @@ echo "  image    : $IMAGE"
 echo "  results  : $OUTDIR"
 echo "=================================================================="
 
-# --- STEP 1: segment + extract the metric profile ---------------------------
-echo
-echo ">>> STEP 1/2  segment the cable and extract its profile"
+# --- segment + extract the metric profile -----------------------------------
 EXTRACT_ARGS=( photo --image "$IMAGE" --out "$PROFILE" )
 # pass through any extra knobs you set as env vars (rotation, smoothing, fit).
 [[ -n "${ROTATE:-}"  ]] && EXTRACT_ARGS+=( --rotate "$ROTATE" )
@@ -69,21 +58,9 @@ if [[ ! -f "$PROFILE" ]]; then
   exit 1
 fi
 
-# --- STEP 2: identify the cable from its profile ----------------------------
-echo
-echo ">>> STEP 2/2  identify the cable material from the profile"
-ID_ARGS=( --profile "$PROFILE" --overlay )
-[[ -n "$MASS_G"    ]] && ID_ARGS+=( --mass-g   "$MASS_G" )
-[[ -n "$LENGTH_M"  ]] && ID_ARGS+=( --length-m "$LENGTH_M" )
-[[ -n "$RADIUS_MM" ]] && ID_ARGS+=( --radius-mm "$RADIUS_MM" )
-# save the identification text report too.
-"$PY" "$HERE/identify_cable.py" "${ID_ARGS[@]}" | tee "$OUTDIR/identification.txt"
-
 echo
 echo "=================================================================="
 echo "  DONE. results in: $OUTDIR"
-echo "    profile.csv         (x_m, z_m)"
-echo "    profile.png         (extracted shape)"
-echo "    profile_fit.png     (elastica fit overlay)"
-echo "    identification.txt  (Gamma / EI / Young's modulus)"
+echo "    profile.csv   (x_m, z_m -- the cable shape in metres)"
+echo "    profile.png   (extracted shape)"
 echo "=================================================================="

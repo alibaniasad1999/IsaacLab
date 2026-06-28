@@ -13,9 +13,9 @@ scripts/cable_simulation/base/cable.py in three deliberate ways:
      used by the base script is removed entirely. This script only visualises
      live (local GUI or livestream) and writes a per-step CSV + summary.json.
 
-  3. START IS MANUAL, no end time by default. The script builds the scene,
-     opens the viewer, and then WAITS for you to press the Play button in the
-     Isaac Sim toolbar. Physics only advances once you hit Play. It then runs
+  3. AUTO-START, no end time by default. The script builds the scene, starts
+     physics automatically, and you just watch the cable move in the viewer /
+     livestream (the toolbar Play/Stop buttons still pause/resume it). It runs
      forever (until you close the window / Stop), UNLESS you provide an end
      time via the CABLE_MAX_TIME environment variable, e.g.
 
@@ -500,35 +500,30 @@ print(f"  capsules logged: {LOG_CAPSULES}")
 
 
 # ===============================================================
-# 9. WAIT FOR USER TO PRESS PLAY (manual start in the GUI)
+# 9. START SIMULATION (auto-start)
 # ===============================================================
-# Make sure the timeline is stopped so physics does not advance until the user
-# presses Play in the Isaac Sim toolbar.
+# world.reset() already started the timeline playing. Make sure it is playing
+# so physics advances as soon as the loop begins -- you just watch it in the
+# viewer / livestream, no Play button needed. (The toolbar Play/Stop buttons
+# still work to pause/resume while the script runs.)
 timeline = omni.timeline.get_timeline_interface()
-timeline.stop()
+timeline.play()
+
+# Render a few frames so the viewport/livestream shows the scene before the
+# physics step loop takes over.
+for _ in range(10):
+    simulation_app.update()
 
 print("\n" + "=" * 70)
-print("  Scene ready. Press the PLAY button in the Isaac Sim toolbar to start.")
-print("  (Physics will not advance until you do.)")
+print("  Simulation started automatically.")
 if MAX_SIM_TIME is None:
     print("  No end time set -- runs until you Stop / close the window.")
     print("  (Set CABLE_MAX_TIME=<seconds> to give it an end time.)")
 else:
-    print(f"  Will stop after {MAX_SIM_TIME} s of simulated (playing) time.")
+    print(f"  Will stop after {MAX_SIM_TIME} s of simulated time.")
 print("=" * 70 + "\n")
 
-# Spin the app, only rendering, until the user presses Play.
-while simulation_app.is_running() and not timeline.is_playing():
-    simulation_app.update()
-
-if not simulation_app.is_running():
-    csv_file.close()
-    simulation_app.close()
-    raise SystemExit("Window closed before Play was pressed.")
-
-print("Play pressed -- starting simulation.")
-
-# Apply the initial kick once physics is live (hanging-kick experiment).
+# Apply the initial kick now that physics is live (hanging-kick experiment).
 try:
     bottom_connector.set_linear_velocity(INITIAL_KICK_VEL)
     print(f"Applied initial velocity: {INITIAL_KICK_VEL}")
@@ -552,7 +547,8 @@ wall_t0 = time.perf_counter()
 
 try:
     while simulation_app.is_running():
-        # Honor the GUI Play/Stop button: only advance physics while playing.
+        # Honor the GUI Stop/Play button: if the user pauses via the toolbar,
+        # keep rendering the stream but don't advance physics.
         if not timeline.is_playing():
             simulation_app.update()
             continue

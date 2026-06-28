@@ -9,13 +9,12 @@ scripts/cable_simulation/base/cable.py in three deliberate ways:
      variables for the data -- the numbers below ARE the configuration. (The
      single exception is the optional end-time, see point 3.)
 
-  2. NO video streaming. The ffmpeg / replicator rgb-annotator recording path
-     used by the base script (so isaaclab.sh could stream frames) is removed
-     entirely. This script only visualises in the Isaac Sim GUI and writes a
-     per-step CSV + summary.json. It is meant to be run with the GUI open.
+  2. NO video recording. The ffmpeg / replicator rgb-annotator recording path
+     used by the base script is removed entirely. This script only visualises
+     live (local GUI or livestream) and writes a per-step CSV + summary.json.
 
   3. START IS MANUAL, no end time by default. The script builds the scene,
-     opens the GUI, and then WAITS for you to press the Play button in the
+     opens the viewer, and then WAITS for you to press the Play button in the
      Isaac Sim toolbar. Physics only advances once you hit Play. It then runs
      forever (until you close the window / Stop), UNLESS you provide an end
      time via the CABLE_MAX_TIME environment variable, e.g.
@@ -34,9 +33,11 @@ Model recap (same physics as the base D6 script):
   * Axial DOFs are LOCKED (inextensible cable).
   * Hanging-kick experiment: top fixed, bottom kicked, obstacle present.
 
-Run (with GUI; then press Play):
-    conda activate env_isaaclab
+Run (local GUI; then press Play):
     ./isaaclab.sh -p scripts/cable_simulation/D6-joints/base.py
+
+Run (remote / headless server, view via WebRTC livestream client):
+    ./isaaclab.sh -p scripts/cable_simulation/D6-joints/base.py --livestream 2
 """
 
 from pathlib import Path
@@ -46,15 +47,26 @@ import json
 import time
 
 # ---------------------------------------------------------------
-# SimulationApp must be created BEFORE importing any isaacsim modules.
-# headless=False ALWAYS: this is the GUI variant by design.
+# Launch Isaac Sim via Isaac Lab's AppLauncher. AppLauncher parses the standard
+# Isaac Lab CLI flags (notably --livestream 1/2 for WebRTC streaming and
+# --headless), so this same script works on a local desktop window OR streamed
+# from a remote/headless server. The app MUST be created before importing any
+# isaacsim / pxr modules.
 # ---------------------------------------------------------------
-from isaacsim.simulation_app import SimulationApp
+import argparse
 
-simulation_app = SimulationApp({"headless": False})
+from isaaclab.app import AppLauncher
+
+parser = argparse.ArgumentParser(
+    description="Flexible cable (D6-joints capsule chain) simulation -- GUI/livestream.")
+AppLauncher.add_app_launcher_args(parser)
+args_cli = parser.parse_args()
+
+app_launcher = AppLauncher(args_cli)
+simulation_app = app_launcher.app
 
 # ---------------------------------------------------------------
-# Imports (after SimulationApp is up)
+# Imports (after the app is up)
 # ---------------------------------------------------------------
 import numpy as np
 import csv

@@ -1,0 +1,386 @@
+\documentclass[11pt]{article}
+
+% ---------- packages ----------
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{bm}
+\usepackage{siunitx}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage[colorlinks=true,linkcolor=black,citecolor=black,urlcolor=blue]{hyperref}
+
+% ---------- theorem-like environments ----------
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+% ---------- handy macros ----------
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\artanh}{\operatorname{artanh}}
+\newcommand{\arsinh}{\operatorname{arsinh}}
+\DeclareMathOperator{\sgn}{sgn}
+
+\title{\textbf{Static Shape of a Flexible Cable Hanging\\Between Two Pinned Points}}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+A uniform, perfectly flexible, inextensible cable is pinned at two arbitrary points in
+a vertical plane and loaded only by its own weight. We derive, from a free-body balance
+of an infinitesimal element, the governing ordinary differential equation and integrate
+it in closed form. The equilibrium shape is a \emph{catenary}, $y=y_0+a\cosh\!\big((x-x_0)/a\big)$.
+We then solve the boundary-value problem posed by the two endpoints and the prescribed
+arc length, reducing the three matching conditions to a single transcendental equation
+for the catenary parameter~$a$, give the existence criterion, and note the parabolic
+small-sag limit. A closing section records the analytical value of the result as a
+ground-truth benchmark for numerical cable models.
+\end{abstract}
+
+% =====================================================================
+\section{Statement and assumptions}
+% =====================================================================
+A cable hangs in a vertical plane, fixed at two points, under its own weight. We seek its
+shape $y(x)$. The model rests on three assumptions.
+
+\begin{enumerate}[label=(A\arabic*),leftmargin=*]
+  \item \textbf{Perfectly flexible.} The cable carries no bending moment, so the internal
+        force---the tension $T$---is everywhere \emph{tangent} to the curve. This is the
+        property that distinguishes a cable from a rod (a rod would add a bending term
+        $EI$, raising the order of the governing equation; see Section~\ref{sec:validation}).
+  \item \textbf{Inextensible and uniform.} The total arc length is a fixed constant $L$,
+        and the weight per unit \emph{arc length} is a constant $w=\lambda g$, with
+        $\lambda$ the linear mass density and $g$ gravitational acceleration.
+  \item \textbf{Gravity only.} The sole distributed load is the vertical weight; the only
+        other forces are the reactions at the two pins.
+\end{enumerate}
+
+\noindent
+Coordinates: $x$ horizontal, $y$ vertical (positive up). Let $s$ be arc length measured
+along the cable and $\theta(s)$ the angle the tangent makes with the horizontal, so that
+$\tan\theta = \dd y/\dd x$.
+
+% =====================================================================
+\section{Free-body diagram of a cable element}
+% =====================================================================
+Isolate an infinitesimal element of cable between arc lengths $s$ and $s+\dd s$.
+Three forces act on it:
+\begin{itemize}[leftmargin=*]
+  \item the tension $T(s)$ at the lower cut, directed tangentially ``back-and-down'';
+  \item the tension $T(s+\dd s)$ at the upper cut, directed tangentially ``forward-and-up'';
+  \item the weight $w\,\dd s$, directed straight down.
+\end{itemize}
+Resolve the tension into horizontal and vertical components,
+\begin{equation}
+  H \equiv T\cos\theta, \qquad V \equiv T\sin\theta .
+\end{equation}
+Static equilibrium of the element yields one scalar equation per direction:
+\begin{equation}
+  \underbrace{\dd\!\left(T\cos\theta\right)=0}_{\text{horizontal}},
+  \qquad
+  \underbrace{\dd\!\left(T\sin\theta\right)=w\,\dd s}_{\text{vertical}} .
+  \label{eq:element}
+\end{equation}
+
+% =====================================================================
+\section{The two conservation facts}
+% =====================================================================
+\paragraph{Horizontal.} The first relation in \eqref{eq:element} integrates immediately:
+\begin{equation}
+  \boxed{\,H = T\cos\theta = \text{constant}\,}.
+  \label{eq:Hconst}
+\end{equation}
+This is the pivotal fact of the whole problem: because nothing loads the cable
+horizontally, the horizontal component of tension is identical at every point.
+
+\paragraph{Vertical.} The second relation gives $\dd V/\dd s = w$. Measure $s$ from the
+\emph{vertex}---the lowest point, where the tangent is horizontal, so that $\theta=0$ and
+$V=0$ there. Integrating from the vertex,
+\begin{equation}
+  \boxed{\,V = T\sin\theta = w\,s\,}.
+  \label{eq:Vlinear}
+\end{equation}
+The vertical pull at any point equals the weight of cable hanging between that point and
+the vertex.
+
+% =====================================================================
+\section{From forces to a slope equation}
+% =====================================================================
+The slope of the curve is the ratio of the tension components,
+\begin{equation}
+  \frac{\dd y}{\dd x} = \tan\theta
+  = \frac{T\sin\theta}{T\cos\theta}
+  = \frac{V}{H}
+  = \frac{w\,s}{H}.
+\end{equation}
+Defining the \emph{catenary parameter}
+\begin{equation}
+  a \equiv \frac{H}{w} \qquad [\,\text{units of length}\,],
+\end{equation}
+the slope equation takes the compact form
+\begin{equation}
+  \frac{\dd y}{\dd x} = \frac{s}{a}.
+  \label{eq:slope}
+\end{equation}
+
+\begin{remark}
+$a$ is the single parameter that fixes the shape: it is the horizontal tension expressed
+in ``weight-lengths.'' Large $a$ (taut cable, large $H$) gives a flat curve; small $a$
+(slack cable) gives a deep sag.
+\end{remark}
+
+% =====================================================================
+\section{Closing the equation with the arc-length relation}
+% =====================================================================
+Equation \eqref{eq:slope} couples $y$ to $s$, and $s$ is itself defined by the curve via
+\begin{equation}
+  \dd s = \sqrt{1+(y')^2}\,\dd x, \qquad y' \equiv \frac{\dd y}{\dd x}.
+\end{equation}
+Differentiating \eqref{eq:slope} with respect to $x$ and substituting $\dd s/\dd x$,
+\begin{equation}
+  \frac{\dd y'}{\dd x} = \frac{1}{a}\frac{\dd s}{\dd x}
+  = \frac{1}{a}\sqrt{1+(y')^2}.
+  \label{eq:ode}
+\end{equation}
+This is the governing ODE: a first-order, separable equation for the slope $p\equiv y'$.
+
+% =====================================================================
+\section{First integration: the slope}
+% =====================================================================
+Separating variables in \eqref{eq:ode},
+\begin{equation}
+  \frac{\dd p}{\sqrt{1+p^2}} = \frac{\dd x}{a}.
+\end{equation}
+The left-hand side integrates to $\arsinh p$, since
+$\tfrac{\dd}{\dd p}\arsinh p = 1/\sqrt{1+p^2}$, giving
+\begin{equation}
+  \arsinh(p) = \frac{x}{a} + C_1.
+\end{equation}
+Placing $x=0$ at the vertex, where $p=y'=0$, fixes $C_1=\arsinh(0)=0$. Inverting,
+\begin{equation}
+  \boxed{\,\frac{\dd y}{\dd x} = \sinh\frac{x}{a}\,}.
+  \label{eq:slopesol}
+\end{equation}
+
+% =====================================================================
+\section{Second integration: the shape}
+% =====================================================================
+Integrating \eqref{eq:slopesol},
+\begin{equation}
+  y = \int \sinh\frac{x}{a}\,\dd x = a\cosh\frac{x}{a} + C_2.
+\end{equation}
+The constant $C_2$ merely places the curve vertically. Writing it together with a
+horizontal shift gives the \emph{catenary}:
+\begin{equation}
+  \boxed{\,y(x) = y_0 + a\cosh\frac{x-x_0}{a}\,},
+  \label{eq:catenary}
+\end{equation}
+whose vertex sits at $\big(x_0,\,y_0+a\big)$. The shape is a hyperbolic cosine---%
+\emph{not} a parabola (Section~\ref{sec:parabola}).
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=12cm, height=6.2cm,
+    axis lines=middle,
+    xlabel={$x$}, ylabel={$y$},
+    xmin=-3.4, xmax=3.4, ymin=0, ymax=6.2,
+    xtick=\empty, ytick=\empty,
+    clip=false,
+    samples=100,
+]
+% catenary y = a cosh(x/a) with a = 1, vertex at (0,1)
+\addplot[thick, domain=-3:2.2]{cosh(x)};
+% chord between the two pins
+\addplot[dashed, gray] coordinates {(-3,{cosh(-3)}) (2.2,{cosh(2.2)})};
+% pins
+\addplot[only marks, mark=*, mark size=2pt] coordinates {(-3,{cosh(-3)}) (2.2,{cosh(2.2)})};
+\node[anchor=south east] at (axis cs:-3,{cosh(-3)}) {$P_1=(x_1,y_1)$};
+\node[anchor=south west] at (axis cs:2.2,{cosh(2.2)}) {$P_2=(x_2,y_2)$};
+% vertex
+\addplot[only marks, mark=*, mark size=1.5pt, color=black] coordinates {(0,1)};
+\node[anchor=north] at (axis cs:0,1) {vertex};
+\node[anchor=west] at (axis cs:0.05,3.1) {$y=y_0+a\cosh\!\frac{x-x_0}{a}$};
+\end{axis}
+\end{tikzpicture}
+\caption{A catenary pinned at two points of unequal height. The dashed line is the chord
+of length $\sqrt{h^2+v^2}$; the cable's arc length between the pins is $L>\sqrt{h^2+v^2}$.
+At the vertex the tension is purely horizontal and equal to $H=wa$.}
+\label{fig:catenary}
+\end{figure}
+
+% =====================================================================
+\section{Arc length and a built-in consistency check}
+% =====================================================================
+Using \eqref{eq:slopesol} and the identity $1+\sinh^2=\cosh^2$,
+\begin{equation}
+  s(x) = \int_0^x \sqrt{1+\sinh^2\tfrac{x'}{a}}\;\dd x'
+       = \int_0^x \cosh\tfrac{x'}{a}\,\dd x'
+       = a\sinh\frac{x}{a}.
+  \label{eq:arclen}
+\end{equation}
+Substituting back into \eqref{eq:slope} returns $y'=s/a=\sinh(x/a)$, in agreement with
+\eqref{eq:slopesol}: the derivation closes on itself.
+
+\begin{remark}[Tension distribution]
+From \eqref{eq:Hconst} and $\cos\theta = 1/\sqrt{1+\sinh^2} = 1/\cosh\!\frac{x-x_0}{a}$,
+the tension is
+\[
+  T = H\cosh\frac{x-x_0}{a} = w\,(y-y_0).
+\]
+Tension is proportional to height above the directrix $y=y_0$. The minimum, $H=wa$, occurs
+at the vertex; the maximum occurs at the higher support. This is the relation to consult
+when checking whether a cable, or a discretized joint chain, will exceed its breaking load.
+\end{remark}
+
+% =====================================================================
+\section{The boundary-value problem}
+% =====================================================================
+The catenary \eqref{eq:catenary} carries three unknowns: $a$ (shape), $x_0$ (vertex
+abscissa), and $y_0$ (vertical offset). The data supply exactly three conditions---the two
+pins and the length:
+\begin{equation}
+  \text{(i) } y(x_1)=y_1,\qquad
+  \text{(ii) } y(x_2)=y_2,\qquad
+  \text{(iii) } s(x_2)-s(x_1)=L.
+\end{equation}
+Introduce the dimensionless endpoint arguments
+\begin{equation}
+  A\equiv\frac{x_1-x_0}{a},\qquad B\equiv\frac{x_2-x_0}{a},
+\end{equation}
+so that the three conditions read
+\begin{equation}
+  y_1 = y_0+a\cosh A,\qquad
+  y_2 = y_0+a\cosh B,\qquad
+  L = a\,(\sinh B-\sinh A).
+\end{equation}
+
+% =====================================================================
+\section{Reduction to a single transcendental equation}
+% =====================================================================
+Let $h\equiv x_2-x_1$ be the horizontal span and $v\equiv y_2-y_1$ the vertical rise.
+Subtracting (i) from (ii) eliminates $y_0$:
+\begin{equation}
+  v = a\,(\cosh B-\cosh A),\qquad\qquad
+  L = a\,(\sinh B-\sinh A).
+\end{equation}
+Apply the sum-to-product identities
+\begin{align}
+  \cosh B-\cosh A &= 2\sinh\tfrac{B+A}{2}\sinh\tfrac{B-A}{2},\\
+  \sinh B-\sinh A &= 2\cosh\tfrac{B+A}{2}\sinh\tfrac{B-A}{2}.
+\end{align}
+Since $B-A=(x_2-x_1)/a=h/a$, we have $\tfrac{B-A}{2}=\tfrac{h}{2a}$. Writing
+$m\equiv\tfrac{A+B}{2}$,
+\begin{equation}
+  v = 2a\,\sinh m\,\sinh\frac{h}{2a},
+  \qquad\qquad
+  L = 2a\,\cosh m\,\sinh\frac{h}{2a}.
+  \label{eq:vL}
+\end{equation}
+Combine the two equations in \eqref{eq:vL} in two ways. \emph{Dividing} cancels the
+common factor $2a\sinh\frac{h}{2a}$:
+\begin{equation}
+  \frac{v}{L}=\tanh m
+  \quad\Longrightarrow\quad
+  m=\artanh\frac{v}{L}.
+  \label{eq:m}
+\end{equation}
+\emph{Squaring and subtracting}, with $\cosh^2 m-\sinh^2 m=1$,
+\begin{equation}
+  L^2-v^2 = \left(2a\sinh\tfrac{h}{2a}\right)^2,
+\end{equation}
+which yields the master equation---a single transcendental equation in the lone
+unknown $a$:
+\begin{equation}
+  \boxed{\,\sqrt{L^2-v^2} = 2a\,\sinh\frac{h}{2a}\,}.
+  \label{eq:master}
+\end{equation}
+
+% =====================================================================
+\section{Solution recipe}
+% =====================================================================
+\begin{enumerate}[label=\textbf{\arabic*.},leftmargin=*]
+  \item \textbf{Solve \eqref{eq:master} for $a$.} The right-hand side
+        $f(a)=2a\sinh\frac{h}{2a}$ is monotone (Section~\ref{sec:existence}), so Newton's
+        method or bisection converges quickly. A serviceable initial guess follows from the
+        small-sag relation $f(a)\approx h\big(1+\tfrac{h^2}{24a^2}\big)$, i.e.
+        $a_0\approx h\big/\!\sqrt{24\,(\sqrt{L^2-v^2}/h-1)}$.
+  \item \textbf{Vertex abscissa $x_0$} from \eqref{eq:m}. Since
+        $m=\tfrac{A+B}{2}=\dfrac{x_1+x_2-2x_0}{2a}$,
+        \begin{equation}
+          x_0 = \frac{x_1+x_2}{2} - a\,\artanh\frac{v}{L}.
+        \end{equation}
+  \item \textbf{Vertical offset $y_0$} from condition (i):
+        \begin{equation}
+          y_0 = y_1 - a\cosh\frac{x_1-x_0}{a}.
+        \end{equation}
+  \item \textbf{Assemble} the shape:
+        \begin{equation}
+          y(x) = y_0 + a\cosh\frac{x-x_0}{a}.
+        \end{equation}
+\end{enumerate}
+
+% =====================================================================
+\section{Existence and the taut limit}
+\label{sec:existence}
+% =====================================================================
+Consider $f(a)=2a\sinh\frac{h}{2a}$. As $a\to0^+$ the hyperbolic sine dominates and
+$f\to\infty$; as $a\to\infty$, $\sinh\varepsilon\approx\varepsilon$ gives
+$f\to 2a\cdot\frac{h}{2a}=h$. The function decreases monotonically from $\infty$ to $h$.
+Hence \eqref{eq:master} has a unique positive root if and only if
+\begin{equation}
+  \sqrt{L^2-v^2}>h
+  \;\Longleftrightarrow\;
+  L>\sqrt{h^2+v^2}.
+\end{equation}
+The cable must be longer than the chord. When $L$ equals the chord, $a\to\infty$ and the
+catenary degenerates to a straight, taut line; $L$ less than the chord is impossible for an
+inextensible cable---precisely the expected physical constraint.
+
+% =====================================================================
+\section{Why it is a cosh and not a parabola}
+\label{sec:parabola}
+% =====================================================================
+A suspension-bridge main cable \emph{is} parabolic, because there the load is uniform per
+unit \emph{horizontal} distance (the deck), giving $V=w_x x$ and $y''=\text{const}$. Here
+the load is uniform per unit \emph{arc length} (the cable's own weight), which produces the
+$\cosh$. The parabola is the small-sag limit of the catenary: for $|x-x_0|\ll a$,
+\begin{equation}
+  a\cosh\frac{x-x_0}{a} \approx a + \frac{(x-x_0)^2}{2a},
+\end{equation}
+the leading term of the Taylor expansion. A shallow catenary therefore looks parabolic,
+but the exact self-weight solution is the hyperbolic cosine.
+
+% =====================================================================
+\section{The result as a numerical benchmark}
+\label{sec:validation}
+% =====================================================================
+Equation \eqref{eq:catenary} with the constants of the solution recipe is the analytical
+ground truth for a static hanging cable, and as such is the canonical check for numerical
+rod and cable models:
+\begin{itemize}[leftmargin=*]
+  \item A \textbf{position-based (XPBD) inextensible rod} should relax to this catenary.
+        Residual error indicates insufficient constraint stiffness or too few solver
+        iterations, not a modelling defect.
+  \item A \textbf{capsule chain with free angular joints} matches the catenary; any
+        non-zero joint stiffness appears as a systematic departure from $\cosh$ that this
+        solution quantifies exactly.
+  \item A \textbf{volumetric FEM cable} will \emph{not} match it, because it absorbs axial
+        load as stretch. Its rest shape is the \emph{elastic catenary}, in which the
+        arc-length--tension relation acquires a stretching term proportional to $1/(EA)$;
+        under identical endpoints it sags more than the inextensible solution. That is the
+        appropriate ground truth for the two-way FEM case and is a natural next derivation.
+\end{itemize}
+A final caveat on scope: the present result assumes zero bending stiffness. A rod with
+non-negligible $EI$ is no longer a catenary but a gravito-elastica, governed by a
+fourth-order ODE with a boundary layer near each clamped end. For a cable, $EI\approx0$ and
+the catenary is exact.
+
+\end{document}
